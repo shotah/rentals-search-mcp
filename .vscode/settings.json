@@ -1,0 +1,98 @@
+{
+  "[go]": {
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    },
+    "editor.defaultFormatter": "golang.go"
+  },
+  "[go.mod]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "golang.go"
+  },
+  "go.formatTool": "default",
+  "go.lintTool": "golangci-lint-v2",
+  "go.lintOnSave": "package",
+  "go.lintFlags": [
+    "--fast"
+  ],
+  "go.testFlags": [
+    "-count=1"
+  ],
+  "go.testTimeout": "5m",
+  "go.coverOnSave": false,
+  "go.toolsManagement.autoUpdate": true,
+  "gopls": {
+    "ui.semanticTokens": true,
+    "ui.diagnostic.staticcheck": true,
+    "formatting.gofumpt": false
+  },
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+  "files.exclude": {
+    "**/bin": true,
+    "**/coverage.out": true,
+    "**/coverage": true,
+    "**/badges": true
+  },
+  "cSpell.words": [
+    "autofix",
+    "bodyclose",
+    "Compileable",
+    "copyloopvar",
+    "covermode",
+    "coverprofile",
+    "Crexi",
+    "distroless",
+    "dupword",
+    "durationcheck",
+    "errname",
+    "errorlint",
+    "exhaustive",
+    "exptostd",
+    "fatcontext",
+    "forcetypeassert",
+    "gantry",
+    "goarch",
+    "GOBIN",
+    "goconst",
+    "gocritic",
+    "goimports",
+    "golangci",
+    "gomodguard",
+    "GOPATH",
+    "gopls",
+    "goreleaser",
+    "gosec",
+    "intrange",
+    "jsonschema",
+    "ldflags",
+    "LoopNet",
+    "mcpserver",
+    "misspell",
+    "modelcontextprotocol",
+    "modernize",
+    "nestif",
+    "nilerr",
+    "nilnil",
+    "nolint",
+    "perfsprint",
+    "prealloc",
+    "predeclared",
+    "rentals",
+    "RentCast",
+    "sdkmcp",
+    "shotah",
+    "sqlclosecheck",
+    "staticcheck",
+    "toplevel",
+    "townhome",
+    "townhomes",
+    "trimpath",
+    "unconvert",
+    "unparam",
+    "uritemplate",
+    "usestdlibvars"
+  ]
+}
