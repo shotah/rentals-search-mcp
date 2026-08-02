@@ -104,7 +104,7 @@ func TestListingsGetRequiresID(t *testing.T) {
 }
 
 func TestAccountGet(t *testing.T) {
-	s := New(nil)
+	s := New(rentcast.NewStub())
 	res, out, err := s.accountGet(t.Context(), nil, accountGetInput{})
 	if err != nil {
 		t.Fatal(err)
@@ -115,6 +115,10 @@ func TestAccountGet(t *testing.T) {
 	m, ok := out.(map[string]any)
 	if !ok || m["provider"] != "RentCast" {
 		t.Fatalf("unexpected out: %#v", out)
+	}
+	u, ok := m["usage"].(*rentcast.Usage)
+	if !ok || u == nil || u.RequestsPerMonth != 50 {
+		t.Fatalf("usage %#v", m["usage"])
 	}
 }
 

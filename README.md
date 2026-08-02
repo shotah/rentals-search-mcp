@@ -54,7 +54,7 @@ see [docs/commercial-spaces.md](docs/commercial-spaces.md).
 | `markets_get` | Aggregate rent / listing stats for a US zip code |
 | `areas_resolve` | Local neighborhood → zips / lat/lng (Seattle presets; no API) |
 | `link_format` | Fallback public search URL (no API call) |
-| `account_get` | Soft usage note — RentCast has no public quota API; point at dashboard |
+| `account_get` | Local usage counter (used/left) + dashboard link — RentCast has no public quota API |
 
 Host names: `rentals__listings_search`, `rentals__listings_get`,
 `rentals__rent_estimate_get`, `rentals__markets_get`, `rentals__areas_resolve`,
@@ -92,6 +92,21 @@ export RENTCAST_API_KEY=...
 # optional (tests / proxies):
 # export RENTCAST_BASE_URL=https://api.rentcast.io/v1
 ```
+
+### Docker / containers
+
+The binary is static (`CGO_ENABLED=0`) and fine in distroless — pass
+`RENTCAST_API_KEY` via env/secrets, never bake it into the image.
+
+**Local usage counter caveat:** `account_get` / search `usage` persist under
+`RENTCAST_USAGE_FILE` (default: OS user config dir). In Docker that path is
+usually **ephemeral** (or unwritable in distroless), so counts reset on
+recreate and can **undercount** real RentCast spend. Mitigations:
+
+- Mount a volume and set `RENTCAST_USAGE_FILE=/data/rentcast-usage.json`, or
+- Treat the dashboard as source of truth and/or set `RENTCAST_USAGE_TRACK=0`
+
+Multiple containers without a shared usage file each keep their own counter.
 
 ## Development
 

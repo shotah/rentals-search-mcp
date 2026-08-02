@@ -22,7 +22,16 @@ download_url = "https://github.com/shotah/rentals-search-mcp/releases/download/{
 RENTCAST_API_KEY=...
 # Optional pin for Docker bake / native fetch:
 # RENTALS_SEARCH_MCP_VERSION=v0.0.1
+
+# Local usage counter (optional). In Docker, mount a volume or counts reset:
+# RENTCAST_USAGE_FILE=/data/rentcast-usage.json
+# RENTCAST_MONTHLY_QUOTA=50
+# RENTCAST_USAGE_TRACK=0
 ```
+
+Docker/distroless: API key via env only. Local `usage` undercounts if the
+usage file is not on a persistent volume — prefer the RentCast dashboard for
+hard quota decisions.
 
 ## Persona (`TOOLS.md`) sketch
 
@@ -46,6 +55,7 @@ Do NOT use rentals tools for retail/office/commercial leases.
 | `listings_get` | `rentals__listings_get` |
 | `rent_estimate_get` | `rentals__rent_estimate_get` |
 | `markets_get` | `rentals__markets_get` |
+| `areas_resolve` | `rentals__areas_resolve` |
 | `link_format` | `rentals__link_format` |
 | `account_get` | `rentals__account_get` |
 

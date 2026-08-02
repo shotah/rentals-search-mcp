@@ -3,12 +3,16 @@ package rentcast
 import "context"
 
 // Stub is an in-memory client for self-test / unit tests (no network).
-type Stub struct{}
+type Stub struct {
+	Usage *UsageTracker
+}
 
 // NewStub returns a non-nil RentalsAPI that returns canned empty results.
-func NewStub() *Stub { return &Stub{} }
+func NewStub() *Stub {
+	return &Stub{Usage: NewUsageTrackerForTest("", defaultMonthlyQuota)}
+}
 
-func (Stub) SearchListings(_ context.Context, req ListingsSearchRequest) (*ListingsSearchResult, error) {
+func (s Stub) SearchListings(_ context.Context, req ListingsSearchRequest) (*ListingsSearchResult, error) {
 	expanded, notes, err := ExpandSearchRequest(req)
 	if err != nil {
 		return nil, err
@@ -28,17 +32,25 @@ func (Stub) SearchListings(_ context.Context, req ListingsSearchRequest) (*Listi
 		Summary:  summarizeListings(nil, 0, limit, offset),
 		Query:    query,
 		Note:     joinNotes("stub client", notes),
+		Usage:    s.Usage.Snapshot(),
 	}, nil
 }
 
-func (Stub) GetListing(_ context.Context, id string) (*Listing, error) {
-	return &Listing{ID: id, Status: "stub"}, nil
+func (s Stub) GetListing(_ context.Context, id string) (*ListingGetResult, error) {
+	return &ListingGetResult{
+		Listing: Listing{ID: id, Status: "stub"},
+		Usage:   s.Usage.Snapshot(),
+	}, nil
 }
 
-func (Stub) RentEstimate(_ context.Context, req RentEstimateRequest) (*RentEstimateResult, error) {
-	return &RentEstimateResult{Address: req.Address, Note: "stub client"}, nil
+func (s Stub) RentEstimate(_ context.Context, req RentEstimateRequest) (*RentEstimateResult, error) {
+	return &RentEstimateResult{Address: req.Address, Note: "stub client", Usage: s.Usage.Snapshot()}, nil
 }
 
-func (Stub) MarketStats(_ context.Context, zipCode string) (*MarketStatsResult, error) {
-	return &MarketStatsResult{ZipCode: zipCode, Note: "stub client"}, nil
+func (s Stub) MarketStats(_ context.Context, zipCode string) (*MarketStatsResult, error) {
+	return &MarketStatsResult{ZipCode: zipCode, Note: "stub client", Usage: s.Usage.Snapshot()}, nil
+}
+
+func (s Stub) AccountUsage() *Usage {
+	return s.Usage.Snapshot()
 }

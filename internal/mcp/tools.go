@@ -221,13 +221,19 @@ func (s *Server) linkFormat(_ context.Context, _ *sdkmcp.CallToolRequest, in lin
 }
 
 func (s *Server) accountGet(_ context.Context, _ *sdkmcp.CallToolRequest, _ accountGetInput) (*sdkmcp.CallToolResult, any, error) {
-	return jsonResult(map[string]any{
+	out := map[string]any{
 		"provider":       "RentCast",
 		"dashboard_url":  "https://app.rentcast.io/",
 		"free_tier_note": "Developer plan includes about 50 API requests per month.",
 		"quota_api":      false,
-		"note":           "RentCast has no public account/usage JSON. Check the dashboard for remaining quota. link_format does not burn requests; each other tool call does.",
-	})
+		"note":           "RentCast has no public account API. usage below is a local counter of successful calls from this binary (calendar month). Verify against the dashboard. link_format / areas_resolve / account_get do not burn RentCast requests.",
+	}
+	if s.Client != nil {
+		if u := s.Client.AccountUsage(); u != nil {
+			out["usage"] = u
+		}
+	}
+	return jsonResult(out)
 }
 
 func errResult(msg string) *sdkmcp.CallToolResult {

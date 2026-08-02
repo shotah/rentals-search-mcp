@@ -71,6 +71,7 @@ type ListingsSearchResult struct {
 	Summary  string         `json:"summary,omitempty"`
 	Query    map[string]any `json:"query,omitempty"`
 	Note     string         `json:"note,omitempty"`
+	Usage    *Usage         `json:"usage,omitempty"`
 }
 
 // RentEstimateRequest is the AVM input.
@@ -92,6 +93,7 @@ type RentEstimateResult struct {
 	Bedrooms      float64 `json:"bedrooms,omitempty"`
 	Bathrooms     float64 `json:"bathrooms,omitempty"`
 	Note          string  `json:"note,omitempty"`
+	Usage         *Usage  `json:"usage,omitempty"`
 }
 
 // MarketTypeStat is rent stats for one property type in a zip.
@@ -115,4 +117,11 @@ type MarketStatsResult struct {
 	MedianDaysOnMarket  float64          `json:"median_days_on_market,omitempty"`
 	ByPropertyType      []MarketTypeStat `json:"by_property_type,omitempty"`
 	Note                string           `json:"note,omitempty"`
+	Usage               *Usage           `json:"usage,omitempty"`
+}
+
+// ListingGetResult is listings_get with an optional local usage snapshot.
+type ListingGetResult struct {
+	Listing
+	Usage *Usage `json:"usage,omitempty"`
 }

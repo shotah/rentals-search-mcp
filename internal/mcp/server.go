@@ -23,9 +23,10 @@ var ServerVersion = "dev"
 // RentalsAPI is the RentCast surface used by tools (mockable in tests).
 type RentalsAPI interface {
 	SearchListings(ctx context.Context, req rentcast.ListingsSearchRequest) (*rentcast.ListingsSearchResult, error)
-	GetListing(ctx context.Context, id string) (*rentcast.Listing, error)
+	GetListing(ctx context.Context, id string) (*rentcast.ListingGetResult, error)
 	RentEstimate(ctx context.Context, req rentcast.RentEstimateRequest) (*rentcast.RentEstimateResult, error)
 	MarketStats(ctx context.Context, zipCode string) (*rentcast.MarketStatsResult, error)
+	AccountUsage() *rentcast.Usage
 }
 
 // Server is the stdio MCP rental search surface.
@@ -106,9 +107,9 @@ func (s *Server) newMCPServer() *sdkmcp.Server {
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "account_get",
-		Description: "Remind the agent about RentCast quota (≈50 free requests/month on Developer) " +
-			"and point at the dashboard. RentCast has no public usage JSON like SerpAPI — " +
-			"this does not call the network.",
+		Description: "Local RentCast usage estimate (requests used/left this calendar month) plus dashboard link. " +
+			"RentCast has no public quota API — this counts successful calls from this binary. " +
+			"Does not call the network. Search tools also attach a usage snapshot.",
 	}, s.accountGet)
 
 	return server

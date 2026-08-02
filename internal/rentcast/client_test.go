@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -289,13 +290,19 @@ func TestGetListingHTTP(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	c := &Client{APIKey: "k", BaseURL: srv.URL, HTTPClient: srv.Client()}
+	c := &Client{
+		APIKey: "k", BaseURL: srv.URL, HTTPClient: srv.Client(),
+		Usage: NewUsageTrackerForTest(filepath.Join(t.TempDir(), "usage.json"), 50),
+	}
 	listing, err := c.GetListing(t.Context(), "abc")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if listing.City != "Portland" || listing.Price != 2400 {
 		t.Fatalf("%+v", listing)
+	}
+	if listing.Usage == nil || listing.Usage.RequestsUsed != 1 {
+		t.Fatalf("usage %+v", listing.Usage)
 	}
 }
 

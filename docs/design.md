@@ -112,11 +112,15 @@ as a **fallback** when quota is tight or the human wants to click around.
 
 ### `account_get`
 
-RentCast does not expose a SerpAPI-style account JSON. Return a static note:
+RentCast does not expose a SerpAPI-style account JSON. We keep a **local**
+counter of successful HTTP calls (calendar month, default quota 50) and return:
 
-- free tier ≈ 50 req/month
-- dashboard URL
-- remind agents that each tool call (except `link_format`) burns a request
+- `usage.requests_used` / `requests_left` / `period_resets`
+- free tier note + dashboard URL
+- reminder that official billing period may differ — verify on the dashboard
+
+`link_format`, `areas_resolve`, and `account_get` do not burn RentCast requests.
+Search tools attach the same `usage` snapshot on their responses.
 
 ## Package layout
 

@@ -29,6 +29,7 @@ type Client struct {
 	APIKey     string
 	BaseURL    string
 	HTTPClient *http.Client
+	Usage      *UsageTracker // optional local quota counter
 }
 
 // NewFromEnv builds a client from RENTCAST_API_KEY (+ optional RENTCAST_BASE_URL).
@@ -47,7 +48,23 @@ func NewFromEnv() (*Client, error) {
 		HTTPClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		Usage: NewUsageTrackerFromEnv(),
 	}, nil
+}
+
+// AccountUsage returns the local usage snapshot (nil if tracking disabled).
+func (c *Client) AccountUsage() *Usage {
+	if c == nil {
+		return nil
+	}
+	return c.Usage.Snapshot()
+}
+
+func (c *Client) attachUsage() *Usage {
+	if c == nil {
+		return nil
+	}
+	return c.Usage.Snapshot()
 }
 
 // SearchListings calls GET /listings/rental/long-term.
@@ -107,11 +124,12 @@ func (c *Client) SearchListings(ctx context.Context, req ListingsSearchRequest) 
 		Summary:  summarizeListings(listings, total, limit, offset),
 		Query:    queryEcho,
 		Note:     note,
+		Usage:    c.attachUsage(),
 	}, nil
 }
 
 // GetListing calls GET /listings/rental/long-term/{id}.
-func (c *Client) GetListing(ctx context.Context, id string) (*Listing, error) {
+func (c *Client) GetListing(ctx context.Context, id string) (*ListingGetResult, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return nil, errors.New("listing id is required")
@@ -120,8 +138,10 @@ func (c *Client) GetListing(ctx context.Context, id string) (*Listing, error) {
 	if _, err := c.getJSON(ctx, "/listings/rental/long-term/"+url.PathEscape(id), nil, &raw); err != nil {
 		return nil, err
 	}
-	listing := raw.toListing()
-	return &listing, nil
+	return &ListingGetResult{
+		Listing: raw.toListing(),
+		Usage:   c.attachUsage(),
+	}, nil
 }
 
 // RentEstimate calls GET /avm/rent/long-term.
@@ -156,6 +176,7 @@ func (c *Client) RentEstimate(ctx context.Context, req RentEstimateRequest) (*Re
 		RentRangeLow:  raw.RentRangeLow,
 		RentRangeHigh: raw.RentRangeHigh,
 		Note:          "AVM estimate only — verify against live listings before deciding.",
+		Usage:         c.attachUsage(),
 	}
 	if raw.SubjectProperty != nil {
 		if a := strings.TrimSpace(raw.SubjectProperty.FormattedAddress); a != "" {
@@ -203,6 +224,7 @@ func (c *Client) MarketStats(ctx context.Context, zipCode string) (*MarketStatsR
 		}
 	}
 	out.Note = "Zip-level rental aggregates. Pair with listings_search for concrete handoff candidates."
+	out.Usage = c.attachUsage()
 	return out, nil
 }
 
@@ -439,6 +461,8 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, de
 	if err := json.Unmarshal(body, dest); err != nil {
 		return res.Header, fmt.Errorf("decode rentcast response: %w", err)
 	}
+	// RentCast bills successful requests; count those locally.
+	c.Usage.RecordSuccess()
 	return res.Header, nil
 }
 

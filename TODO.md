@@ -27,7 +27,7 @@ Lean stdio MCP: search + recommend + listing handoff. Matches README tool surfac
 | `rent_estimate_get` | `rentals__rent_estimate_get` | `GET /avm/rent/long-term` |
 | `markets_get` | `rentals__markets_get` | `GET /markets` (zip stats) |
 | `link_format` | `rentals__link_format` | local URL builder (no API) |
-| `account_get` | `rentals__account_get` | docs-only / soft note (no public quota API) |
+| `account_get` | `rentals__account_get` | local usage counter + dashboard (no public quota API) |
 
 Checklist:
 
