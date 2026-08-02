@@ -4,6 +4,8 @@
 (or you bake a local binary into the image). Do not point `download_url` at a
 work org.
 
+Agent recipes (TOOLS.md sketch, tool cheat sheet): **[agent.md](agent.md)**.
+
 ## `mcp.toml`
 
 ```toml
@@ -33,19 +35,12 @@ Docker/distroless: API key via env only. Local `usage` undercounts if the
 usage file is not on a persistent volume — prefer the RentCast dashboard for
 hard quota decisions.
 
-## Persona (`TOOLS.md`) sketch
+## Persona
 
-```text
-## Rentals (apartments / houses)
-
-When friends ask for apartments or rental houses:
-1. rentals__listings_search with city+state or zip, bedrooms, price_max
-2. rentals__listings_get for a chosen id
-3. Optional: rentals__markets_get for zip context; rentals__rent_estimate_get for “is this rent fair?”
-4. Hand off listing_url / contact — never apply or message landlords for the human
-
-Do NOT use rentals tools for retail/office/commercial leases.
-```
+Paste the **TOOLS.md sketch** from [agent.md](agent.md) into
+`local-agent/persona/TOOLS.md`. Keep
+[local-agent/docs/rentals.md](https://github.com/shotah/ai-gantry/blob/main/local-agent/docs/rentals.md)
+in sync when shipping the consumer PR.
 
 ## Host tool names
 
@@ -65,4 +60,5 @@ host table with a `rentals` row when shipping the consumer PR.
 ## Cost reminder
 
 RentCast Developer ≈ **50 requests/month**. Prefer one tight `listings_search`
-over many exploratory pages. `link_format` is free (no API).
+over many exploratory pages. `areas_resolve`, `link_format`, and `account_get`
+are free (no RentCast call).

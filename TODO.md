@@ -12,6 +12,7 @@
 - [x] Pre-commit hook script (`scripts/pre-commit` → `make install-hooks`)
 - [ ] Personal GitHub repo (manual — **never** work org)
 - [ ] `git init` + `make install-hooks` + push (personal remote)
+- [x] Agent docs / TOOLS.md sketch in-repo ([docs/agent.md](docs/agent.md))
 - [ ] ai-gantry `mcp.toml` + `local-agent/docs/rentals.md` consumer PR
 
 ---

@@ -179,6 +179,7 @@ Do **not** publish this to a work GitHub org. Use a personal account / org
 (module path assumes `shotah`).
 
 More consumer notes: [docs/ai-gantry.md](docs/ai-gantry.md).
+Agent tool recipes / TOOLS.md sketch: [docs/agent.md](docs/agent.md).
 
 ## License
 
