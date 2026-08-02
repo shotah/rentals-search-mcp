@@ -542,7 +542,7 @@ func contactFromRaw(c *rawContact) *ListingContact {
 	return out
 }
 
-// listingHandoffURL prefers agent/office website; otherwise a public address search.
+// listingHandoffURL prefers agent/office website; otherwise a Zillow for-rent search.
 func listingHandoffURL(l Listing) string {
 	if l.Agent != nil && l.Agent.Website != "" {
 		return l.Agent.Website
@@ -552,11 +552,35 @@ func listingHandoffURL(l Listing) string {
 	}
 	addr := strings.TrimSpace(l.FormattedAddress)
 	if addr == "" {
+		parts := make([]string, 0, 4)
+		if l.City != "" {
+			parts = append(parts, l.City)
+		}
+		if l.State != "" {
+			parts = append(parts, l.State)
+		}
+		if l.ZipCode != "" {
+			parts = append(parts, l.ZipCode)
+		}
+		addr = strings.Join(parts, " ")
+	}
+	return zillowForRentSearchURL(addr)
+}
+
+// zillowForRentSearchURL builds a current Zillow for-rent search URL.
+// Do not use /homes/{slug}_rb/ — that shape 404s without a ZPID.
+func zillowForRentSearchURL(term string) string {
+	term = strings.TrimSpace(term)
+	if term == "" {
 		return ""
 	}
-	// Zillow address search — human click-around; not an application.
-	slug := strings.ReplaceAll(addr, " ", "-")
-	return "https://www.zillow.com/homes/" + url.PathEscape(slug) + "_rb/"
+	state := fmt.Sprintf(
+		`{"usersSearchTerm":%q,"isListVisible":true,"filterState":{"isForRent":{"value":true},"isForSaleByAgent":{"value":false},"isForSaleByOwner":{"value":false}}}`,
+		term,
+	)
+	return "https://www.zillow.com/homes/for_rent/?" + url.Values{
+		"searchQueryState": {state},
+	}.Encode()
 }
 
 type rawRentEstimate struct {

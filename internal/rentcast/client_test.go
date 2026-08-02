@@ -217,8 +217,11 @@ func TestSearchListingsHTTP(t *testing.T) {
 	if res.Listings[0].Agent == nil || res.Listings[0].Agent.Phone != "2065550100" {
 		t.Fatalf("agent %#v", res.Listings[0].Agent)
 	}
-	if !strings.Contains(res.Listings[0].ListingURL, "zillow.com") {
+	if !strings.Contains(res.Listings[0].ListingURL, "zillow.com/homes/for_rent") {
 		t.Fatalf("listing_url %q", res.Listings[0].ListingURL)
+	}
+	if strings.Contains(res.Listings[0].ListingURL, "_rb/") {
+		t.Fatalf("legacy _rb/ slug URL should not be used: %q", res.Listings[0].ListingURL)
 	}
 	if res.Listings[1].ListingURL != "https://harbor.example.com/listing/456" {
 		t.Fatalf("office website url %q", res.Listings[1].ListingURL)
@@ -404,5 +407,18 @@ func TestSummarizeEmpty(t *testing.T) {
 	s := summarizeListings(nil, 0, 10, 0)
 	if !strings.Contains(s, "No listings") {
 		t.Fatalf("%q", s)
+	}
+}
+
+func TestZillowForRentSearchURL(t *testing.T) {
+	u := zillowForRentSearchURL("123 Pine St, Seattle, WA 98101")
+	if !strings.Contains(u, "for_rent") || !strings.Contains(u, "searchQueryState") {
+		t.Fatalf("%q", u)
+	}
+	if strings.Contains(u, "_rb/") {
+		t.Fatalf("legacy slug: %q", u)
+	}
+	if got := listingHandoffURL(Listing{FormattedAddress: "9 Elm St, Denver, CO 80202"}); !strings.Contains(got, "for_rent") {
+		t.Fatalf("%q", got)
 	}
 }
