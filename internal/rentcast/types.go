@@ -5,6 +5,8 @@ type ListingsSearchRequest struct {
 	City          string
 	State         string
 	ZipCode       string
+	ZipCodes      string // CSV / pipe list — expanded into ZipFilter
+	Neighborhood  string // local preset name (e.g. "Capitol Hill")
 	Address       string
 	Latitude      float64
 	Longitude     float64
@@ -16,8 +18,17 @@ type ListingsSearchRequest struct {
 	PriceMin      int
 	PriceMax      int
 	Status        string
+	DaysOld       string // RentCast daysOld (single = max; ranges like "*:7" ok)
+	DaysOldMax    int    // ergonomic max age in days
+	NewThisWeek   bool   // shorthand → days_old_max=7
+	PetsWanted    bool   // not filterable upstream — soft note only
+	ParkingWanted bool
+	LaundryWanted bool
 	Limit         int
 	Offset        int
+
+	// ZipFilter is set by ExpandSearchRequest for optional client-side zip narrowing.
+	ZipFilter []string
 }
 
 // ListingContact is agent/office handoff info from the listing record.

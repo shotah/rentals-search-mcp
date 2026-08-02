@@ -9,6 +9,14 @@ type Stub struct{}
 func NewStub() *Stub { return &Stub{} }
 
 func (Stub) SearchListings(_ context.Context, req ListingsSearchRequest) (*ListingsSearchResult, error) {
+	expanded, notes, err := ExpandSearchRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	req = expanded
+	if err := validateSearchRequest(req); err != nil {
+		return nil, err
+	}
 	limit, offset := normalizePage(req.Limit, req.Offset)
 	_, query := searchParams(req, limit, offset)
 	return &ListingsSearchResult{
@@ -19,7 +27,7 @@ func (Stub) SearchListings(_ context.Context, req ListingsSearchRequest) (*Listi
 		Offset:   offset,
 		Summary:  summarizeListings(nil, 0, limit, offset),
 		Query:    query,
-		Note:     "stub client",
+		Note:     joinNotes("stub client", notes),
 	}, nil
 }
 

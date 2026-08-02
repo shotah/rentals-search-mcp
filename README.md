@@ -48,32 +48,38 @@ see [docs/commercial-spaces.md](docs/commercial-spaces.md).
 
 | Tool | Description |
 | --- | --- |
-| `listings_search` | City/zip/radius search + filters (beds, baths, rent, property type) |
+| `listings_search` | City/zip/neighborhood/radius search + beds/baths/rent/type + `new_this_week` / `days_old_max` |
 | `listings_get` | One listing by RentCast listing id |
 | `rent_estimate_get` | Long-term rent AVM for an address (+ comps when available) |
 | `markets_get` | Aggregate rent / listing stats for a US zip code |
+| `areas_resolve` | Local neighborhood → zips / lat/lng (Seattle presets; no API) |
 | `link_format` | Fallback public search URL (no API call) |
 | `account_get` | Soft usage note — RentCast has no public quota API; point at dashboard |
 
 Host names: `rentals__listings_search`, `rentals__listings_get`,
-`rentals__rent_estimate_get`, `rentals__markets_get`, `rentals__link_format`,
-`rentals__account_get`.
+`rentals__rent_estimate_get`, `rentals__markets_get`, `rentals__areas_resolve`,
+`rentals__link_format`, `rentals__account_get`.
 
 ### Agent contract
 
 ```text
-listings_search → [listings_get] → present listing url / contact
-                 ↘ markets_get / rent_estimate_get for context
+[areas_resolve] → listings_search → [listings_get] → present listing url / contact
+                              ↘ markets_get / rent_estimate_get for context
 ```
 
-1. **Where + budget:** `listings_search` with `city`+`state` or `zip_code`
-   (or lat/lng + `radius`), plus `bedrooms`, `bathrooms`, `price` range,
-   `property_type`.
-2. **Detail:** `listings_get` when the human picks a candidate id.
-3. **Context (optional):** `markets_get` for zip averages; `rent_estimate_get`
+1. **Where + budget:** `listings_search` with `city`+`state`, `zip_code` /
+   `zip_codes`, or `neighborhood` (e.g. `Capitol Hill`), plus beds/price/type.
+   Use `new_this_week` or `days_old_max` for fresh listings.
+2. **Neighborhoods:** `areas_resolve` (`list_all=true` or `neighborhood=Ballard`)
+   when the human names a Seattle area — then pass `neighborhood` into search.
+3. **Detail:** `listings_get` when the human picks a candidate id.
+4. **Context (optional):** `markets_get` for zip averages; `rent_estimate_get`
    when comparing a specific address to “fair rent”.
-4. **Handoff:** give the human the listing URL / contact fields. Do **not**
+5. **Handoff:** give the human the listing URL / contact fields. Do **not**
    impersonate the renter or submit applications.
+
+`pets_wanted` / `parking_wanted` / `laundry_wanted` are **soft preferences only**
+— RentCast does not expose those filters; confirm on `listing_url`.
 
 ## Setup
 

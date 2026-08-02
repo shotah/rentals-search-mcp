@@ -132,6 +132,9 @@ func TestSearchListingsHTTP(t *testing.T) {
 		if q.Get("price") != "1500:2500" {
 			t.Fatalf("price %q", q.Get("price"))
 		}
+		if q.Get("daysOld") != "7" {
+			t.Fatalf("daysOld %q", q.Get("daysOld"))
+		}
 		if q.Get("limit") != "10" {
 			t.Fatalf("limit %q", q.Get("limit"))
 		}
@@ -190,6 +193,7 @@ func TestSearchListingsHTTP(t *testing.T) {
 		PropertyType: "apartment",
 		PriceMin:     1500,
 		PriceMax:     2500,
+		NewThisWeek:  true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -200,8 +204,14 @@ func TestSearchListingsHTTP(t *testing.T) {
 	if res.Query["state"] != "WA" || res.Query["property_type"] != "Apartment" {
 		t.Fatalf("query %#v", res.Query)
 	}
+	if res.Query["days_old"] != "7" || res.Query["new_this_week"] != true {
+		t.Fatalf("query %#v", res.Query)
+	}
 	if res.Summary == "" || !strings.Contains(res.Summary, "Top picks") {
 		t.Fatalf("summary %q", res.Summary)
+	}
+	if !strings.Contains(res.Summary, "new this week") {
+		t.Fatalf("summary missing fresh note: %q", res.Summary)
 	}
 	if res.Listings[0].Agent == nil || res.Listings[0].Agent.Phone != "2065550100" {
 		t.Fatalf("agent %#v", res.Listings[0].Agent)
@@ -214,6 +224,41 @@ func TestSearchListingsHTTP(t *testing.T) {
 	}
 	if res.Listings[1].Bedrooms != 0 {
 		t.Fatalf("studio bedrooms=%v", res.Listings[1].Bedrooms)
+	}
+}
+
+func TestSearchListingsNeighborhoodHTTP(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("latitude") == "" || q.Get("longitude") == "" || q.Get("radius") == "" {
+			t.Fatalf("expected lat/lng/radius, got %v", q)
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			{
+				"id": "a", "formattedAddress": "1 Pike, Seattle, WA 98102",
+				"city": "Seattle", "state": "WA", "zipCode": "98102",
+				"bedrooms": 1, "bathrooms": 1, "price": 2000, "daysOnMarket": 2,
+			},
+			{
+				"id": "b", "formattedAddress": "9 Main, Seattle, WA 98101",
+				"city": "Seattle", "state": "WA", "zipCode": "98101",
+				"bedrooms": 1, "bathrooms": 1, "price": 1900, "daysOnMarket": 3,
+			},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	c := &Client{APIKey: "k", BaseURL: srv.URL, HTTPClient: srv.Client()}
+	res, err := c.SearchListings(t.Context(), ListingsSearchRequest{Neighborhood: "Capitol Hill"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Query["neighborhood"] != "Capitol Hill" {
+		t.Fatalf("%#v", res.Query)
+	}
+	// Radius search may return nearby zips; client filter keeps neighborhood zips when multi.
+	if res.Count < 1 {
+		t.Fatalf("%+v", res)
 	}
 }
 

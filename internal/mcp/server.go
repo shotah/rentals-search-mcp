@@ -49,6 +49,7 @@ func RegisteredToolNames() []string {
 		"listings_get",
 		"rent_estimate_get",
 		"markets_get",
+		"areas_resolve",
 		"link_format",
 		"account_get",
 	}
@@ -64,8 +65,10 @@ func (s *Server) newMCPServer() *sdkmcp.Server {
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "listings_search",
 		Description: "Search long-term residential rental listings (apartments, houses, condos, townhomes) " +
-			"by city/state, zip, or lat/lng+radius. Filter by bedrooms, bathrooms, rent, square footage, " +
-			"and property_type. Returns ranked listing summaries with listing_url / contact handoff fields. " +
+			"by city/state, zip, zip_codes, neighborhood preset, or lat/lng+radius. Filter by bedrooms, " +
+			"bathrooms, rent, square footage, property_type, and days on market (new_this_week / days_old_max). " +
+			"pets_wanted / parking_wanted / laundry_wanted are soft notes only (RentCast cannot filter them). " +
+			"Returns ranked listing summaries with listing_url / contact handoff fields. " +
 			"Does not apply or contact landlords. Not for retail/office/commercial leases.",
 	}, s.listingsSearch)
 
@@ -89,8 +92,15 @@ func (s *Server) newMCPServer() *sdkmcp.Server {
 	}, s.marketsGet)
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
+		Name: "areas_resolve",
+		Description: "Resolve a neighborhood name to zip codes and optional lat/lng (local presets, no API). " +
+			"Seattle neighborhoods are built in (Capitol Hill, Ballard, …). Use list_all=true to browse. " +
+			"Then call listings_search with neighborhood=… or the returned zips.",
+	}, s.areasResolve)
+
+	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "link_format",
-		Description: "Build a public rental SEARCH URL (fallback) from city/state/zip and filters. " +
+		Description: "Build a public rental SEARCH URL (fallback) from city/state/zip/neighborhood and filters. " +
 			"No API call and no application. Prefer listings_search when quota allows.",
 	}, s.linkFormat)
 
@@ -162,6 +172,9 @@ func SelfTest() error {
 	}
 	if pt := rentcast.NormalizePropertyType("apartment"); pt != "Apartment" {
 		return fmt.Errorf("NormalizePropertyType: got %q", pt)
+	}
+	if _, err := rentcast.ResolveAreas(rentcast.AreaResolveRequest{Neighborhood: "Capitol Hill"}); err != nil {
+		return fmt.Errorf("ResolveAreas: %w", err)
 	}
 	return nil
 }

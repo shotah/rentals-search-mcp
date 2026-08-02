@@ -52,6 +52,11 @@ func NewFromEnv() (*Client, error) {
 
 // SearchListings calls GET /listings/rental/long-term.
 func (c *Client) SearchListings(ctx context.Context, req ListingsSearchRequest) (*ListingsSearchResult, error) {
+	expanded, expandNotes, err := ExpandSearchRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	req = expanded
 	if err := validateSearchRequest(req); err != nil {
 		return nil, err
 	}
@@ -70,12 +75,28 @@ func (c *Client) SearchListings(ctx context.Context, req ListingsSearchRequest) 
 		listings = append(listings, raw[i].toListing())
 	}
 
-	total := len(listings)
-	if v := hdr.Get("X-Total-Count"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
-			total = n
+	// Client-side zip narrowing for multi-zip / neighborhood presets (one API call).
+	filtered := false
+	if len(req.ZipFilter) > 1 || (len(req.ZipFilter) > 0 && strings.TrimSpace(req.ZipCode) == "") {
+		before := len(listings)
+		listings = filterListingsByZips(listings, req.ZipFilter)
+		if len(listings) < before {
+			filtered = true
+			expandNotes = append(expandNotes, fmt.Sprintf("client zip filter kept %d/%d results", len(listings), before))
 		}
 	}
+
+	total := len(listings)
+	if !filtered {
+		if v := hdr.Get("X-Total-Count"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+				total = n
+			}
+		}
+	}
+
+	note := "Present listing_url / contact fields to the human. Do not apply or message landlords."
+	note = joinNotes(note, expandNotes)
 
 	return &ListingsSearchResult{
 		Listings: listings,
@@ -85,7 +106,7 @@ func (c *Client) SearchListings(ctx context.Context, req ListingsSearchRequest) 
 		Offset:   offset,
 		Summary:  summarizeListings(listings, total, limit, offset),
 		Query:    queryEcho,
-		Note:     "Present listing_url / contact fields to the human. Do not apply or message landlords.",
+		Note:     note,
 	}, nil
 }
 
@@ -230,12 +251,12 @@ func normalizeOnePropertyType(raw string) string {
 }
 
 func validateSearchRequest(req ListingsSearchRequest) error {
-	hasZip := strings.TrimSpace(req.ZipCode) != ""
+	hasZip := strings.TrimSpace(req.ZipCode) != "" || len(req.ZipFilter) > 0
 	hasCityState := strings.TrimSpace(req.City) != "" && strings.TrimSpace(req.State) != ""
 	hasAddress := strings.TrimSpace(req.Address) != ""
 	hasLatLng := req.Latitude != 0 || req.Longitude != 0
 	if !hasZip && !hasCityState && !hasAddress && !hasLatLng {
-		return errors.New("provide city+state, zip_code, address, or latitude/longitude")
+		return errors.New("provide city+state, zip_code, neighborhood, address, or latitude/longitude")
 	}
 	if req.Radius < 0 {
 		return errors.New("radius must be >= 0")
@@ -245,6 +266,9 @@ func validateSearchRequest(req ListingsSearchRequest) error {
 	}
 	if req.Offset < 0 {
 		return errors.New("offset must be >= 0")
+	}
+	if req.DaysOldMax < 0 {
+		return errors.New("days_old_max must be >= 0")
 	}
 	return nil
 }
@@ -314,6 +338,28 @@ func searchParams(req ListingsSearchRequest, limit, offset int) (url.Values, map
 	if price := formatPriceRange(req.PriceMin, req.PriceMax); price != "" {
 		params.Set("price", price)
 		echo["price"] = price
+	}
+	if v := strings.TrimSpace(req.DaysOld); v != "" {
+		params.Set("daysOld", v)
+		echo["days_old"] = v
+	}
+	if v := strings.TrimSpace(req.Neighborhood); v != "" {
+		echo["neighborhood"] = v
+	}
+	if len(req.ZipFilter) > 0 {
+		echo["zip_filter"] = req.ZipFilter
+	}
+	if req.NewThisWeek {
+		echo["new_this_week"] = true
+	}
+	if req.PetsWanted {
+		echo["pets_wanted"] = true
+	}
+	if req.ParkingWanted {
+		echo["parking_wanted"] = true
+	}
+	if req.LaundryWanted {
+		echo["laundry_wanted"] = true
 	}
 	status := strings.TrimSpace(req.Status)
 	if status == "" {
@@ -552,9 +598,20 @@ func summarizeListings(listings []Listing, total, limit, offset int) string {
 	if offset > 0 {
 		pageNote += fmt.Sprintf(" (offset %d)", offset)
 	}
+	newThisWeek := 0
+	for i := range listings {
+		if listings[i].DaysOnMarket > 0 && listings[i].DaysOnMarket <= 7 {
+			newThisWeek++
+		}
+	}
+	freshNote := ""
+	if newThisWeek > 0 {
+		freshNote = fmt.Sprintf(" %d listing(s) look new this week (≤7 days on market).", newThisWeek)
+	}
 	_ = limit
-	return pageNote + ". Top picks (freshest / value): " + strings.Join(parts, "; ") +
-		". Hand the human listing_url or agent/office contact — do not apply for them."
+	return pageNote + ". Top picks (freshest / value): " + strings.Join(parts, "; ") + "." +
+		freshNote +
+		" Hand the human listing_url or agent/office contact — do not apply for them."
 }
 
 func shortAddress(l Listing) string {

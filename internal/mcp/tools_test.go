@@ -12,8 +12,8 @@ var toolNameRE = regexp.MustCompile(`^[a-z]+(_[a-z0-9]+)+$`)
 
 func TestRegisteredToolNames(t *testing.T) {
 	names := RegisteredToolNames()
-	if len(names) != 6 {
-		t.Fatalf("want 6 tools, got %d: %v", len(names), names)
+	if len(names) != 7 {
+		t.Fatalf("want 7 tools, got %d: %v", len(names), names)
 	}
 	for _, n := range names {
 		if strings.HasPrefix(n, "rentals_") {
@@ -120,7 +120,9 @@ func TestAccountGet(t *testing.T) {
 
 func TestLinkFormat(t *testing.T) {
 	s := New(nil)
-	res, out, err := s.linkFormat(t.Context(), nil, linkFormatInput{City: "Seattle", State: "WA"})
+	res, out, err := s.linkFormat(t.Context(), nil, linkFormatInput{
+		City: "Seattle", State: "WA", Neighborhood: "Ballard", PetsWanted: true,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +134,44 @@ func TestLinkFormat(t *testing.T) {
 		t.Fatalf("out type %T", out)
 	}
 	u, _ := m["search_url"].(string)
-	if !strings.Contains(u, "zillow.com") {
+	if !strings.Contains(u, "zillow.com") || !strings.Contains(u, "pets=true") {
 		t.Fatalf("url %q", u)
+	}
+}
+
+func TestAreasResolve(t *testing.T) {
+	s := New(nil)
+	res, out, err := s.areasResolve(t.Context(), nil, areasResolveInput{Neighborhood: "u district"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res != nil && res.IsError {
+		t.Fatalf("%+v", res)
+	}
+	got, ok := out.(*rentcast.AreaResolveResult)
+	if !ok || got.Count != 1 || got.Areas[0].Name != "University District" {
+		t.Fatalf("%#v", out)
+	}
+}
+
+func TestListingsSearchNeighborhoodStub(t *testing.T) {
+	s := New(rentcast.NewStub())
+	res, out, err := s.listingsSearch(t.Context(), nil, listingsSearchInput{
+		Neighborhood: "Fremont",
+		NewThisWeek:  true,
+		PetsWanted:   true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res != nil && res.IsError {
+		t.Fatalf("%+v", res)
+	}
+	got, ok := out.(*rentcast.ListingsSearchResult)
+	if !ok || got.Query["days_old"] != "7" || got.Query["neighborhood"] != "Fremont" {
+		t.Fatalf("%#v", out)
+	}
+	if !strings.Contains(got.Note, "RentCast") {
+		t.Fatalf("note %q", got.Note)
 	}
 }

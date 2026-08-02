@@ -55,14 +55,23 @@ Agent-facing args (snake_case):
 | --- | --- | --- |
 | `city` / `state` | `city` / `state` | Case-sensitive on their side — normalize carefully |
 | `zip_code` | `zipCode` | Prefer when human gives a zip |
+| `zip_codes` | (client filter) | CSV/pipe multi-zip; one API call + filter when city/state set |
+| `neighborhood` | lat/lng or zips | Local presets (`areas_resolve`); Seattle first |
 | `address` | `address` | Full address; optional with `radius` |
 | `latitude` / `longitude` / `radius` | same | Radius miles, max 100 |
 | `property_type` | `propertyType` | Alias map below |
 | `bedrooms` / `bathrooms` | same | `0` = studio; support `min:max` ranges |
 | `square_footage` | `squareFootage` | Ranges ok |
 | `price` / `price_min` / `price_max` | `price` | Prefer min/max ergonomics for agents |
+| `new_this_week` / `days_old_max` / `days_old` | `daysOld` | Fresh listings (≤7 days shorthand) |
+| `pets_wanted` / `parking_wanted` / `laundry_wanted` | — | Soft notes only; RentCast has no amenity filters |
 | `status` | `status` | Default `Active` |
 | `limit` / `offset` | same | Default `limit=10` for agents (cap ≤50) |
+
+### `areas_resolve`
+
+Local only (no API). Maps neighborhood names/aliases → zips + optional lat/lng.
+Start with Seattle; add metros as friends hunt elsewhere.
 
 Property-type aliases (MCP → RentCast):
 

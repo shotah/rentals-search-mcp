@@ -38,6 +38,7 @@
   },
   "cSpell.words": [
     "autofix",
+    "Belltown",
     "bodyclose",
     "Compileable",
     "copyloopvar",
@@ -47,6 +48,7 @@
     "distroless",
     "dupword",
     "durationcheck",
+    "Eastlake",
     "errname",
     "errorlint",
     "exhaustive",
@@ -77,7 +79,9 @@
     "nilerr",
     "nilnil",
     "nolint",
+    "Northgate",
     "perfsprint",
+    "Phinney",
     "prealloc",
     "predeclared",
     "rentals",
@@ -93,6 +97,7 @@
     "unconvert",
     "unparam",
     "uritemplate",
-    "usestdlibvars"
+    "usestdlibvars",
+    "Wallingford"
   ]
 }

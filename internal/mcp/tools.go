@@ -16,6 +16,8 @@ type listingsSearchInput struct {
 	City          string  `json:"city,omitempty" jsonschema:"City name (case-sensitive upstream; e.g. Seattle)"`
 	State         string  `json:"state,omitempty" jsonschema:"2-letter state (e.g. WA)"`
 	ZipCode       string  `json:"zip_code,omitempty" jsonschema:"5-digit US zip code"`
+	ZipCodes      string  `json:"zip_codes,omitempty" jsonschema:"Comma/pipe-separated zips for multi-zip search (client filter when city+state set)"`
+	Neighborhood  string  `json:"neighborhood,omitempty" jsonschema:"Local preset e.g. Capitol Hill / Ballard (Seattle); expands to lat/lng or zips"`
 	Address       string  `json:"address,omitempty" jsonschema:"Full address Street, City, State, Zip"`
 	Latitude      float64 `json:"latitude,omitempty" jsonschema:"Search center latitude"`
 	Longitude     float64 `json:"longitude,omitempty" jsonschema:"Search center longitude"`
@@ -26,9 +28,22 @@ type listingsSearchInput struct {
 	SquareFootage string  `json:"square_footage,omitempty" jsonschema:"Living area sqft; ranges ok"`
 	PriceMin      int     `json:"price_min,omitempty" jsonschema:"Minimum monthly rent USD"`
 	PriceMax      int     `json:"price_max,omitempty" jsonschema:"Maximum monthly rent USD"`
+	DaysOld       string  `json:"days_old,omitempty" jsonschema:"Max listing age in days (RentCast daysOld); e.g. 7 or *:7"`
+	DaysOldMax    int     `json:"days_old_max,omitempty" jsonschema:"Max days on market (shorthand for days_old)"`
+	NewThisWeek   bool    `json:"new_this_week,omitempty" jsonschema:"Only listings ≤7 days old (sets days_old_max=7)"`
+	PetsWanted    bool    `json:"pets_wanted,omitempty" jsonschema:"Soft preference only — RentCast cannot filter pets; verify on listing_url"`
+	ParkingWanted bool    `json:"parking_wanted,omitempty" jsonschema:"Soft preference only — RentCast cannot filter parking; verify on listing_url"`
+	LaundryWanted bool    `json:"laundry_wanted,omitempty" jsonschema:"Soft preference only — RentCast cannot filter laundry; verify on listing_url"`
 	Status        string  `json:"status,omitempty" jsonschema:"Active (default) or Inactive"`
 	Limit         int     `json:"limit,omitempty" jsonschema:"Page size (default 10, max 50)"`
 	Offset        int     `json:"offset,omitempty" jsonschema:"Pagination offset"`
+}
+
+type areasResolveInput struct {
+	Neighborhood string `json:"neighborhood,omitempty" jsonschema:"Neighborhood name or alias (e.g. Capitol Hill, u district)"`
+	City         string `json:"city,omitempty" jsonschema:"Optional city filter (e.g. Seattle)"`
+	State        string `json:"state,omitempty" jsonschema:"Optional 2-letter state filter"`
+	ListAll      bool   `json:"list_all,omitempty" jsonschema:"List all known presets (optionally filtered by city/state)"`
 }
 
 type listingsGetInput struct {
@@ -48,12 +63,16 @@ type marketsGetInput struct {
 }
 
 type linkFormatInput struct {
-	City         string `json:"city,omitempty" jsonschema:"City name"`
-	State        string `json:"state,omitempty" jsonschema:"2-letter state"`
-	ZipCode      string `json:"zip_code,omitempty" jsonschema:"Zip code"`
-	Bedrooms     string `json:"bedrooms,omitempty" jsonschema:"Optional bedrooms"`
-	PriceMax     int    `json:"price_max,omitempty" jsonschema:"Optional max monthly rent"`
-	PropertyType string `json:"property_type,omitempty" jsonschema:"apartment|house|…"`
+	City          string `json:"city,omitempty" jsonschema:"City name"`
+	State         string `json:"state,omitempty" jsonschema:"2-letter state"`
+	ZipCode       string `json:"zip_code,omitempty" jsonschema:"Zip code"`
+	Neighborhood  string `json:"neighborhood,omitempty" jsonschema:"Optional neighborhood for search term"`
+	Bedrooms      string `json:"bedrooms,omitempty" jsonschema:"Optional bedrooms"`
+	PriceMax      int    `json:"price_max,omitempty" jsonschema:"Optional max monthly rent"`
+	PropertyType  string `json:"property_type,omitempty" jsonschema:"apartment|house|…"`
+	PetsWanted    bool   `json:"pets_wanted,omitempty" jsonschema:"Hint for public search URL only"`
+	ParkingWanted bool   `json:"parking_wanted,omitempty" jsonschema:"Hint noted in response; not all sites support URL filters"`
+	LaundryWanted bool   `json:"laundry_wanted,omitempty" jsonschema:"Hint noted in response; not all sites support URL filters"`
 }
 
 type accountGetInput struct{}
@@ -66,6 +85,8 @@ func (s *Server) listingsSearch(ctx context.Context, _ *sdkmcp.CallToolRequest, 
 		City:          in.City,
 		State:         in.State,
 		ZipCode:       in.ZipCode,
+		ZipCodes:      in.ZipCodes,
+		Neighborhood:  in.Neighborhood,
 		Address:       in.Address,
 		Latitude:      in.Latitude,
 		Longitude:     in.Longitude,
@@ -76,9 +97,28 @@ func (s *Server) listingsSearch(ctx context.Context, _ *sdkmcp.CallToolRequest, 
 		SquareFootage: in.SquareFootage,
 		PriceMin:      in.PriceMin,
 		PriceMax:      in.PriceMax,
+		DaysOld:       in.DaysOld,
+		DaysOldMax:    in.DaysOldMax,
+		NewThisWeek:   in.NewThisWeek,
+		PetsWanted:    in.PetsWanted,
+		ParkingWanted: in.ParkingWanted,
+		LaundryWanted: in.LaundryWanted,
 		Status:        in.Status,
 		Limit:         in.Limit,
 		Offset:        in.Offset,
+	})
+	if err != nil {
+		return errResult(err.Error()), nil, nil
+	}
+	return jsonResult(res)
+}
+
+func (s *Server) areasResolve(_ context.Context, _ *sdkmcp.CallToolRequest, in areasResolveInput) (*sdkmcp.CallToolResult, any, error) {
+	res, err := rentcast.ResolveAreas(rentcast.AreaResolveRequest{
+		Neighborhood: in.Neighborhood,
+		City:         in.City,
+		State:        in.State,
+		ListAll:      in.ListAll,
 	})
 	if err != nil {
 		return errResult(err.Error()), nil, nil
@@ -135,7 +175,10 @@ func (s *Server) marketsGet(ctx context.Context, _ *sdkmcp.CallToolRequest, in m
 }
 
 func (s *Server) linkFormat(_ context.Context, _ *sdkmcp.CallToolRequest, in linkFormatInput) (*sdkmcp.CallToolResult, any, error) {
-	parts := make([]string, 0, 3)
+	parts := make([]string, 0, 4)
+	if n := strings.TrimSpace(in.Neighborhood); n != "" {
+		parts = append(parts, n)
+	}
 	if c := strings.TrimSpace(in.City); c != "" {
 		parts = append(parts, c)
 	}
@@ -147,7 +190,7 @@ func (s *Server) linkFormat(_ context.Context, _ *sdkmcp.CallToolRequest, in lin
 	}
 	loc := strings.Join(parts, " ")
 	if loc == "" {
-		return errResult("provide city+state and/or zip_code"), nil, nil
+		return errResult("provide city+state and/or zip_code (neighborhood optional)"), nil, nil
 	}
 	// Public fallback: Zillow rental search (human click-around). Not a checkout.
 	u := "https://www.zillow.com/homes/for_rent/?" + url.Values{
@@ -159,11 +202,21 @@ func (s *Server) linkFormat(_ context.Context, _ *sdkmcp.CallToolRequest, in lin
 	if in.PriceMax > 0 {
 		u += "&price_max=" + url.QueryEscape(strconv.Itoa(in.PriceMax))
 	}
+	if in.PetsWanted {
+		u += "&pets=true"
+	}
 	_ = in.PropertyType
+	note := "Fallback public search URL only. Prefer listings_search when API quota allows."
+	if in.PetsWanted || in.ParkingWanted || in.LaundryWanted {
+		note += " Amenity URL hints are best-effort; confirm on the site. RentCast cannot filter pets/parking/laundry."
+	}
 	return jsonResult(map[string]any{
-		"search_url": u,
-		"location":   loc,
-		"note":       "Fallback public search URL only. Prefer listings_search when API quota allows.",
+		"search_url":     u,
+		"location":       loc,
+		"pets_wanted":    in.PetsWanted,
+		"parking_wanted": in.ParkingWanted,
+		"laundry_wanted": in.LaundryWanted,
+		"note":           note,
 	})
 }
 

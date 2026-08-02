@@ -83,8 +83,9 @@ Until then: develop and test entirely on disk (`make check`).
 
 ## v2 ideas (after real apartment-hunt usage)
 
-- [ ] Days-on-market / “new this week” helpers
-- [ ] Multi-zip or neighborhood presets (e.g. Seattle neighborhoods → zips)
-- [ ] Pet / parking / laundry filters if RentCast exposes stable fields
+- [x] Days-on-market / “new this week” helpers (`new_this_week`, `days_old_max` → RentCast `daysOld`)
+- [x] Multi-zip or neighborhood presets (`areas_resolve` + `neighborhood` / `zip_codes`; Seattle first)
+- [x] Pet / parking / laundry — **not** in RentCast API; soft `*_wanted` notes + `link_format` pets hint
 - [ ] Sale listings tier behind `--tool-tier` (keep core lean)
 - [ ] Sibling **commercial** MCP once a data source is chosen
+- [ ] More metro neighborhood presets beyond Seattle — demand-driven (friends first; expand if others actually use it)
