@@ -112,7 +112,8 @@ func (c *Client) SearchListings(ctx context.Context, req ListingsSearchRequest) 
 		}
 	}
 
-	note := "Present listing_url / contact fields to the human. Do not apply or message landlords."
+	note := "Present listing_url / contact fields to the human. Do not apply or message landlords. " +
+		"listing_url is agent/office website when present, else a Google search for the address (RentCast has no Zillow/Realtor deep-link ids)."
 	note = joinNotes(note, expandNotes)
 
 	return &ListingsSearchResult{
@@ -542,7 +543,11 @@ func contactFromRaw(c *rawContact) *ListingContact {
 	return out
 }
 
-// listingHandoffURL prefers agent/office website; otherwise a Zillow for-rent search.
+// listingHandoffURL prefers agent/office website; otherwise a Google address search.
+//
+// RentCast does not return Zillow ZPIDs or Realtor.com M-ids, so we cannot build
+// stable deep links like realtor.com/rentals/details/…_M…. Google search for
+// "{address} rental" reliably surfaces the live listing (photos + contact).
 func listingHandoffURL(l Listing) string {
 	if l.Agent != nil && l.Agent.Website != "" {
 		return l.Agent.Website
@@ -550,37 +555,33 @@ func listingHandoffURL(l Listing) string {
 	if l.Office != nil && l.Office.Website != "" {
 		return l.Office.Website
 	}
-	addr := strings.TrimSpace(l.FormattedAddress)
-	if addr == "" {
-		parts := make([]string, 0, 4)
-		if l.City != "" {
-			parts = append(parts, l.City)
-		}
-		if l.State != "" {
-			parts = append(parts, l.State)
-		}
-		if l.ZipCode != "" {
-			parts = append(parts, l.ZipCode)
-		}
-		addr = strings.Join(parts, " ")
-	}
-	return zillowForRentSearchURL(addr)
+	return googleRentalSearchURL(listingAddress(l))
 }
 
-// zillowForRentSearchURL builds a current Zillow for-rent search URL.
-// Do not use /homes/{slug}_rb/ — that shape 404s without a ZPID.
-func zillowForRentSearchURL(term string) string {
-	term = strings.TrimSpace(term)
-	if term == "" {
+func listingAddress(l Listing) string {
+	if addr := strings.TrimSpace(l.FormattedAddress); addr != "" {
+		return addr
+	}
+	parts := make([]string, 0, 4)
+	if l.City != "" {
+		parts = append(parts, l.City)
+	}
+	if l.State != "" {
+		parts = append(parts, l.State)
+	}
+	if l.ZipCode != "" {
+		parts = append(parts, l.ZipCode)
+	}
+	return strings.Join(parts, " ")
+}
+
+// googleRentalSearchURL is the address handoff when we lack a portal property id.
+func googleRentalSearchURL(addr string) string {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
 		return ""
 	}
-	state := fmt.Sprintf(
-		`{"usersSearchTerm":%q,"isListVisible":true,"filterState":{"isForRent":{"value":true},"isForSaleByAgent":{"value":false},"isForSaleByOwner":{"value":false}}}`,
-		term,
-	)
-	return "https://www.zillow.com/homes/for_rent/?" + url.Values{
-		"searchQueryState": {state},
-	}.Encode()
+	return "https://www.google.com/search?q=" + url.QueryEscape(addr+" rental")
 }
 
 type rawRentEstimate struct {

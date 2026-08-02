@@ -22,6 +22,8 @@ Tool names in this binary do **not** start with `rentals_`.
    (“is this rent fair?”).
 5. **Handoff** — give `listing_url` / agent/office contact. **Never** apply,
    message landlords, or schedule tours for the human.
+   `listing_url` is the agent/office site when RentCast has one; otherwise a
+   Google search for `{address} rental` (RentCast has no Zillow/Realtor deep-link ids).
 
 ## Tool cheat sheet
 
