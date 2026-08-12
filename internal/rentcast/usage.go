@@ -151,8 +151,9 @@ func (t *UsageTracker) snapshotLocked(now time.Time) *Usage {
 	left := max(0, t.quota-t.count)
 	next := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, now.Location())
 	note := "Local counter of successful RentCast calls from this machine/binary. " +
-		"Not the official dashboard — RentCast billing period may differ from calendar month. " +
-		"Verify at https://app.rentcast.io/ when unsure."
+		"Resets on the 1st of each calendar month (local time) — period_resets is that date. " +
+		"Free tier ≈ 50/month (~1–2/day) — treat requests_left as a hard budget. " +
+		"Not the official dashboard; RentCast's billing cycle may differ. Verify at https://app.rentcast.io/ when unsure."
 	if t.path == "" {
 		note = "In-memory only (no writable usage file). " + note
 	}

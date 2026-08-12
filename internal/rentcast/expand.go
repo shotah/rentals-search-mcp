@@ -10,6 +10,9 @@ const amenityUnsupportedNote = "RentCast listings API does not expose pet/parkin
 
 // ExpandSearchRequest applies neighborhood presets, multi-zip parsing, and
 // new-this-week / days-old helpers before the HTTP call.
+//
+// Quota rule: multi-zip / multi-neighborhood always collapses to ONE RentCast
+// request (city+state or a single geo center) plus local zip filtering.
 func ExpandSearchRequest(req ListingsSearchRequest) (ListingsSearchRequest, []string, error) {
 	notes := make([]string, 0, 4)
 
@@ -19,23 +22,30 @@ func ExpandSearchRequest(req ListingsSearchRequest) (ListingsSearchRequest, []st
 	}
 
 	var err error
-	req, zips, notes, err = applyNeighborhood(req, zips, notes)
+	req, zips, notes, err = applyNeighborhoods(req, zips, notes)
 	if err != nil {
 		return req, nil, err
 	}
 
-	if len(zips) == 1 && strings.TrimSpace(req.ZipCode) == "" {
+	switch {
+	case len(zips) == 1 && strings.TrimSpace(req.ZipCode) == "":
 		req.ZipCode = zips[0]
+	case len(zips) > 1:
+		// One API call: never pin a single zipCode when filtering many zips.
+		req.ZipCode = ""
+		switch {
+		case req.Latitude != 0 || req.Longitude != 0:
+			notes = append(notes, "thrifty: one geo API call, client filter to zip_filter")
+		case strings.TrimSpace(req.City) != "" && strings.TrimSpace(req.State) != "":
+			notes = append(notes, "thrifty: one city+state API call, client filter to zip_filter")
+		case strings.TrimSpace(req.Address) != "":
+			notes = append(notes, "thrifty: one address/radius API call, client filter to zip_filter")
+		default:
+			req.ZipCode = zips[0]
+			notes = append(notes, fmt.Sprintf("thrifty: one API call via primary zip %s (pass city+state to cover all zips once)", zips[0]))
+		}
 	}
 	req.ZipFilter = zips
-
-	// Multi-zip without a location anchor: require city+state or use first zip for the API.
-	if len(zips) > 1 && strings.TrimSpace(req.ZipCode) == "" &&
-		(strings.TrimSpace(req.City) == "" || strings.TrimSpace(req.State) == "") &&
-		req.Latitude == 0 && req.Longitude == 0 && strings.TrimSpace(req.Address) == "" {
-		req.ZipCode = zips[0]
-		notes = append(notes, fmt.Sprintf("multi-zip search using primary zip %s (pass city+state to search once and filter)", zips[0]))
-	}
 
 	if req.NewThisWeek && strings.TrimSpace(req.DaysOld) == "" && req.DaysOldMax <= 0 {
 		req.DaysOldMax = 7
@@ -52,14 +62,45 @@ func ExpandSearchRequest(req ListingsSearchRequest) (ListingsSearchRequest, []st
 	return req, notes, nil
 }
 
-func applyNeighborhood(req ListingsSearchRequest, zips, notes []string) (ListingsSearchRequest, []string, []string, error) {
-	nb := strings.TrimSpace(req.Neighborhood)
-	if nb == "" {
+func applyNeighborhoods(req ListingsSearchRequest, zips, notes []string) (ListingsSearchRequest, []string, []string, error) {
+	names := parseNeighborhoodList(req.Neighborhood)
+	if len(names) == 0 {
 		return req, zips, notes, nil
 	}
-	area := LookupNeighborhood(nb, req.City, req.State)
+	if len(names) == 1 {
+		return applyOneNeighborhood(req, names[0], zips, notes)
+	}
+
+	// Multi-neighborhood → merge zips, force ONE city+state search (not N geo calls).
+	resolved := make([]string, 0, len(names))
+	for _, name := range names {
+		area := LookupNeighborhood(name, req.City, req.State)
+		if area == nil {
+			return req, zips, notes, fmt.Errorf("unknown neighborhood %q — call areas_resolve (list_all=true) for Seattle presets", name)
+		}
+		resolved = append(resolved, area.Name)
+		if strings.TrimSpace(req.City) == "" {
+			req.City = area.City
+		}
+		if strings.TrimSpace(req.State) == "" {
+			req.State = area.State
+		}
+		zips = mergeZips(zips, area.Zips)
+	}
+	req.Neighborhood = strings.Join(resolved, ", ")
+	// Clear geo pin so we don't do a tiny single-neighborhood radius.
+	req.Latitude = 0
+	req.Longitude = 0
+	req.Radius = 0
+	notes = append(notes, fmt.Sprintf("neighborhoods [%s] → one search, filter zips %s",
+		req.Neighborhood, strings.Join(zips, ", ")))
+	return req, zips, notes, nil
+}
+
+func applyOneNeighborhood(req ListingsSearchRequest, name string, zips, notes []string) (ListingsSearchRequest, []string, []string, error) {
+	area := LookupNeighborhood(name, req.City, req.State)
 	if area == nil {
-		return req, zips, notes, fmt.Errorf("unknown neighborhood %q — call areas_resolve (list_all=true) for Seattle presets", nb)
+		return req, zips, notes, fmt.Errorf("unknown neighborhood %q — call areas_resolve (list_all=true) for Seattle presets", name)
 	}
 	req.Neighborhood = area.Name
 	if strings.TrimSpace(req.City) == "" {
@@ -70,10 +111,11 @@ func applyNeighborhood(req ListingsSearchRequest, zips, notes []string) (Listing
 	}
 	zips = mergeZips(zips, area.Zips)
 
+	explicitZips := len(ParseZipList(req.ZipCodes)) > 0
 	useGeo := area.Latitude != 0 && area.Longitude != 0 &&
 		req.Latitude == 0 && req.Longitude == 0 &&
 		strings.TrimSpace(req.ZipCode) == "" &&
-		len(ParseZipList(req.ZipCodes)) == 0
+		!explicitZips
 
 	switch {
 	case useGeo:
@@ -85,14 +127,39 @@ func applyNeighborhood(req ListingsSearchRequest, zips, notes []string) (Listing
 				req.Radius = defaultNeighborhoodRadius
 			}
 		}
-		notes = append(notes, fmt.Sprintf("neighborhood %s → lat/lng + %.1f mi radius", area.Name, req.Radius))
+		notes = append(notes, fmt.Sprintf("neighborhood %s → lat/lng + %.1f mi radius (1 API call)", area.Name, req.Radius))
 	case len(area.Zips) == 1 && strings.TrimSpace(req.ZipCode) == "":
 		req.ZipCode = area.Zips[0]
-		notes = append(notes, fmt.Sprintf("neighborhood %s → zip %s", area.Name, area.Zips[0]))
+		notes = append(notes, fmt.Sprintf("neighborhood %s → zip %s (1 API call)", area.Name, area.Zips[0]))
 	case len(area.Zips) > 1:
-		notes = append(notes, fmt.Sprintf("neighborhood %s → filter zips %s", area.Name, strings.Join(area.Zips, ", ")))
+		notes = append(notes, fmt.Sprintf("neighborhood %s → filter zips %s (1 API call)", area.Name, strings.Join(area.Zips, ", ")))
 	}
 	return req, zips, notes, nil
+}
+
+func parseNeighborhoodList(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	raw = strings.ReplaceAll(raw, "|", ",")
+	raw = strings.ReplaceAll(raw, ";", ",")
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	seen := map[string]bool{}
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		key := normalizeAreaKey(p)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, p)
+	}
+	return out
 }
 
 func mergeZips(a, b []string) []string {

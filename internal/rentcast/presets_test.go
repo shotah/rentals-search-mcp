@@ -67,7 +67,7 @@ func TestExpandNewThisWeekAndNeighborhood(t *testing.T) {
 }
 
 func TestExpandZipCodes(t *testing.T) {
-	req, _, err := ExpandSearchRequest(ListingsSearchRequest{
+	req, notes, err := ExpandSearchRequest(ListingsSearchRequest{
 		City:     "Seattle",
 		State:    "WA",
 		ZipCodes: "98102,98122",
@@ -75,8 +75,34 @@ func TestExpandZipCodes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(req.ZipFilter) != 2 {
-		t.Fatalf("%v", req.ZipFilter)
+	if len(req.ZipFilter) != 2 || req.ZipCode != "" {
+		t.Fatalf("%+v", req)
+	}
+	if !strings.Contains(strings.Join(notes, " "), "one city+state") {
+		t.Fatalf("notes %v", notes)
+	}
+}
+
+func TestExpandMultiNeighborhoodOneCall(t *testing.T) {
+	req, notes, err := ExpandSearchRequest(ListingsSearchRequest{
+		Neighborhood: "Ballard, Fremont, Wallingford",
+		PriceMax:     2500,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.City != "Seattle" || req.State != "WA" {
+		t.Fatalf("%+v", req)
+	}
+	if req.Latitude != 0 || req.Longitude != 0 {
+		t.Fatalf("multi-neighborhood should not pin single geo: %+v", req)
+	}
+	if len(req.ZipFilter) < 2 || req.ZipCode != "" {
+		t.Fatalf("want multi zip filter, one city call: %+v", req)
+	}
+	joined := strings.Join(notes, " ")
+	if !strings.Contains(joined, "neighborhoods") || !strings.Contains(joined, "one") {
+		t.Fatalf("notes %v", notes)
 	}
 }
 

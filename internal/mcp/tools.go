@@ -16,8 +16,8 @@ type listingsSearchInput struct {
 	City          string  `json:"city,omitempty" jsonschema:"City name (case-sensitive upstream; e.g. Seattle)"`
 	State         string  `json:"state,omitempty" jsonschema:"2-letter state (e.g. WA)"`
 	ZipCode       string  `json:"zip_code,omitempty" jsonschema:"5-digit US zip code"`
-	ZipCodes      string  `json:"zip_codes,omitempty" jsonschema:"Comma/pipe-separated zips for multi-zip search (client filter when city+state set)"`
-	Neighborhood  string  `json:"neighborhood,omitempty" jsonschema:"Local preset e.g. Capitol Hill / Ballard (Seattle); expands to lat/lng or zips"`
+	ZipCodes      string  `json:"zip_codes,omitempty" jsonschema:"Comma/pipe-separated zips — ONE API call with city+state (client zip filter). Prefer this over multiple searches."`
+	Neighborhood  string  `json:"neighborhood,omitempty" jsonschema:"Seattle preset(s), comma-separated OK e.g. Ballard,Fremont,Wallingford — ONE API call. Do not search each area separately."`
 	Address       string  `json:"address,omitempty" jsonschema:"Full address Street, City, State, Zip"`
 	Latitude      float64 `json:"latitude,omitempty" jsonschema:"Search center latitude"`
 	Longitude     float64 `json:"longitude,omitempty" jsonschema:"Search center longitude"`
@@ -224,9 +224,9 @@ func (s *Server) accountGet(_ context.Context, _ *sdkmcp.CallToolRequest, _ acco
 	out := map[string]any{
 		"provider":       "RentCast",
 		"dashboard_url":  "https://app.rentcast.io/",
-		"free_tier_note": "Developer plan includes about 50 API requests per month.",
+		"free_tier_note": "Developer plan ≈ 50 API requests per calendar month (~1–2/day). Combine neighborhoods/zips into ONE listings_search.",
 		"quota_api":      false,
-		"note":           "RentCast has no public account API. usage below is a local counter of successful calls from this binary (calendar month). Verify against the dashboard. link_format / areas_resolve / account_get do not burn RentCast requests.",
+		"note":           "Local counter resets on the 1st (see usage.period_resets). Treat requests_left as a hard budget. FREE: link_format, areas_resolve, account_get. Dashboard remains source of truth if billing cycle differs.",
 	}
 	if s.Client != nil {
 		if u := s.Client.AccountUsage(); u != nil {

@@ -65,51 +65,46 @@ func (s *Server) newMCPServer() *sdkmcp.Server {
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "listings_search",
-		Description: "Search long-term residential rental listings (apartments, houses, condos, townhomes) " +
-			"by city/state, zip, zip_codes, neighborhood preset, or lat/lng+radius. Filter by bedrooms, " +
-			"bathrooms, rent, square footage, property_type, and days on market (new_this_week / days_old_max). " +
-			"pets_wanted / parking_wanted / laundry_wanted are soft notes only (RentCast cannot filter them). " +
-			"Returns ranked listing summaries with listing_url / contact handoff fields. " +
-			"Does not apply or contact landlords. Not for retail/office/commercial leases.",
+		Description: "Search long-term residential rentals (burns 1 RentCast request). Free tier ≈50/month — use sparingly. " +
+			"THRIFTY: pass multiple neighborhoods as comma-separated neighborhood=Ballard,Fremont OR zip_codes=98107,98103 " +
+			"with city+state for ONE call — never one search per area. " +
+			"Filter tightly (bedrooms, price_max, new_this_week). Soft pets/parking/laundry prefs are not API filters. " +
+			"Returns listing_url / contact handoff. Does not apply or contact landlords.",
 	}, s.listingsSearch)
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "listings_get",
-		Description: "Get one long-term rental listing by id from listings_search. " +
-			"Use after the human picks a candidate. Does not apply or contact landlords.",
+		Description: "Get one listing by id (burns 1 RentCast request). Only after the human picks a candidate from search. " +
+			"Do not prefetch many ids. Does not apply or contact landlords.",
 	}, s.listingsGet)
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "rent_estimate_get",
-		Description: "Estimate fair long-term rent for a US residential address (AVM) with comparable " +
-			"properties when available. Use when asking whether a listed rent is reasonable. " +
-			"Not for commercial retail spaces.",
+		Description: "Fair-rent AVM for one address (burns 1 RentCast request). Use sparingly when asking if a listed rent is reasonable. " +
+			"Not for commercial spaces.",
 	}, s.rentEstimateGet)
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "markets_get",
-		Description: "Get aggregate rental market statistics for a US zip code " +
-			"(averages, listing trends). Useful context before or after listings_search.",
+		Description: "Zip rental market aggregates (burns 1 RentCast request). Optional context — skip if quota is tight; " +
+			"prefer a tight listings_search instead.",
 	}, s.marketsGet)
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "areas_resolve",
-		Description: "Resolve a neighborhood name to zip codes and optional lat/lng (local presets, no API). " +
-			"Seattle neighborhoods are built in (Capitol Hill, Ballard, …). Use list_all=true to browse. " +
-			"Then call listings_search with neighborhood=… or the returned zips.",
+		Description: "FREE (no RentCast call). Resolve Seattle neighborhood name(s) to zips/lat/lng. " +
+			"Use list_all=true once, then ONE listings_search with neighborhood=A,B,C or zip_codes=… — not N searches.",
 	}, s.areasResolve)
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
-		Name: "link_format",
-		Description: "Build a public rental SEARCH URL (fallback) from city/state/zip/neighborhood and filters. " +
-			"No API call and no application. Prefer listings_search when quota allows.",
+		Name:        "link_format",
+		Description: "FREE public rental search URL fallback (no RentCast call). Prefer when usage.requests_left is low.",
 	}, s.linkFormat)
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "account_get",
-		Description: "Local RentCast usage estimate (requests used/left this calendar month) plus dashboard link. " +
-			"RentCast has no public quota API — this counts successful calls from this binary. " +
-			"Does not call the network. Search tools also attach a usage snapshot.",
+		Description: "FREE local usage counter (requests_used / requests_left / period_resets on the 1st). " +
+			"Check before burning RentCast calls. Free tier ≈50/month (~1–2/day). Does not call the network.",
 	}, s.accountGet)
 
 	return server
