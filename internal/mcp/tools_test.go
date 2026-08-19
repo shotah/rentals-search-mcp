@@ -34,6 +34,7 @@ func TestSelfTest(t *testing.T) {
 func TestListingsSearchStub(t *testing.T) {
 	s := New(rentcast.NewStub())
 	res, out, err := s.listingsSearch(t.Context(), nil, listingsSearchInput{
+		Intent:       "rent",
 		City:         "Austin",
 		State:        "TX",
 		PropertyType: "house",
@@ -55,9 +56,29 @@ func TestListingsSearchStub(t *testing.T) {
 	}
 }
 
+func TestListingsSearchMultiPropertyTypeStub(t *testing.T) {
+	s := New(rentcast.NewStub())
+	res, out, err := s.listingsSearch(t.Context(), nil, listingsSearchInput{
+		Intent:       "buy",
+		City:         "Austin",
+		State:        "TX",
+		PropertyType: "house,condo",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res != nil && res.IsError {
+		t.Fatalf("unexpected error result: %+v", res)
+	}
+	got, ok := out.(*rentcast.ListingsSearchResult)
+	if !ok || got == nil || got.Query["property_type"] != "Single Family|Condo" {
+		t.Fatalf("unexpected result: %#v", out)
+	}
+}
+
 func TestListingsSearchNilClient(t *testing.T) {
 	s := New(nil)
-	res, _, err := s.listingsSearch(t.Context(), nil, listingsSearchInput{ZipCode: "98101"})
+	res, _, err := s.listingsSearch(t.Context(), nil, listingsSearchInput{Intent: "rent", ZipCode: "98101"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,6 +110,21 @@ func TestMarketsGetAndRentEstimateStub(t *testing.T) {
 	}
 	if out == nil {
 		t.Fatal("nil estimate out")
+	}
+}
+
+func TestListingsGetStub(t *testing.T) {
+	s := New(rentcast.NewStub())
+	res, out, err := s.listingsGet(t.Context(), nil, listingsGetInput{ListingID: "abc", Intent: "buy"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res != nil && res.IsError {
+		t.Fatalf("%+v", res)
+	}
+	got, ok := out.(*rentcast.ListingGetResult)
+	if !ok || got == nil || got.ID != "abc" || got.Intent != "buy" {
+		t.Fatalf("%#v", out)
 	}
 }
 
@@ -125,7 +161,7 @@ func TestAccountGet(t *testing.T) {
 func TestLinkFormat(t *testing.T) {
 	s := New(nil)
 	res, out, err := s.linkFormat(t.Context(), nil, linkFormatInput{
-		City: "Seattle", State: "WA", Neighborhood: "Ballard", PetsWanted: true,
+		Intent: "rent", City: "Seattle", State: "WA", Neighborhood: "Ballard", PetsWanted: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -138,8 +174,85 @@ func TestLinkFormat(t *testing.T) {
 		t.Fatalf("out type %T", out)
 	}
 	u, _ := m["search_url"].(string)
-	if !strings.Contains(u, "zillow.com") || !strings.Contains(u, "pets=true") {
+	if !strings.Contains(u, "zillow.com") || !strings.Contains(u, "for_rent") || !strings.Contains(u, "pets=true") {
 		t.Fatalf("url %q", u)
+	}
+	if m["intent"] != "rent" {
+		t.Fatalf("intent %#v", m["intent"])
+	}
+}
+
+func TestLinkFormatBuy(t *testing.T) {
+	s := New(nil)
+	res, out, err := s.linkFormat(t.Context(), nil, linkFormatInput{
+		Intent: "purchase", City: "Seattle", State: "WA",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res != nil && res.IsError {
+		t.Fatalf("unexpected error: %+v", res)
+	}
+	m, ok := out.(map[string]any)
+	if !ok {
+		t.Fatalf("out type %T", out)
+	}
+	u, _ := m["search_url"].(string)
+	if !strings.Contains(u, "for_sale") {
+		t.Fatalf("url %q", u)
+	}
+	if m["intent"] != "buy" {
+		t.Fatalf("intent %#v", m["intent"])
+	}
+}
+
+func TestLinkFormatRequiresIntent(t *testing.T) {
+	s := New(nil)
+	res, _, err := s.linkFormat(t.Context(), nil, linkFormatInput{City: "Seattle", State: "WA"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res == nil || !res.IsError {
+		t.Fatal("expected intent error")
+	}
+}
+
+func TestListingsSearchRequiresIntent(t *testing.T) {
+	s := New(rentcast.NewStub())
+	res, _, err := s.listingsSearch(t.Context(), nil, listingsSearchInput{City: "Austin", State: "TX"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res == nil || !res.IsError {
+		t.Fatal("expected intent error")
+	}
+}
+
+func TestListingsSearchBuyStub(t *testing.T) {
+	s := New(rentcast.NewStub())
+	res, out, err := s.listingsSearch(t.Context(), nil, listingsSearchInput{
+		Intent: "buy", City: "Austin", State: "TX", PropertyType: "condo", PriceMax: 500000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res != nil && res.IsError {
+		t.Fatalf("%+v", res)
+	}
+	got, ok := out.(*rentcast.ListingsSearchResult)
+	if !ok || got == nil || got.Intent != "buy" || got.Query["intent"] != "buy" {
+		t.Fatalf("%#v", out)
+	}
+}
+
+func TestListingsGetRequiresIntent(t *testing.T) {
+	s := New(rentcast.NewStub())
+	res, _, err := s.listingsGet(t.Context(), nil, listingsGetInput{ListingID: "abc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res == nil || !res.IsError {
+		t.Fatal("expected intent error")
 	}
 }
 
@@ -161,6 +274,7 @@ func TestAreasResolve(t *testing.T) {
 func TestListingsSearchNeighborhoodStub(t *testing.T) {
 	s := New(rentcast.NewStub())
 	res, out, err := s.listingsSearch(t.Context(), nil, listingsSearchInput{
+		Intent:       "rent",
 		Neighborhood: "Fremont",
 		NewThisWeek:  true,
 		PetsWanted:   true,

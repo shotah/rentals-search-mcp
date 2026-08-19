@@ -23,8 +23,8 @@ Lean stdio MCP: search + recommend + listing handoff. Matches README tool surfac
 
 | Tool | Host after | RentCast source |
 | --- | --- | --- |
-| `listings_search` | `rentals__listings_search` | `GET /listings/rental/long-term` |
-| `listings_get` | `rentals__listings_get` | `GET /listings/rental/long-term/{id}` |
+| `listings_search` | `rentals__listings_search` | `GET /listings/rental/long-term` or `GET /listings/sale` (`intent`) |
+| `listings_get` | `rentals__listings_get` | `GET /listings/rental/long-term/{id}` or `GET /listings/sale/{id}` |
 | `rent_estimate_get` | `rentals__rent_estimate_get` | `GET /avm/rent/long-term` |
 | `markets_get` | `rentals__markets_get` | `GET /markets` (zip stats) |
 | `link_format` | `rentals__link_format` | local URL builder (no API) |
@@ -54,7 +54,7 @@ We do not apply, message landlords, or schedule tours.
 | --- | --- |
 | Short-term / vacation rentals | Different inventory (Google Hotels / Airbnb). Separate MCP if needed. |
 | Retail / office / industrial leases | RentCast explicitly excludes these. See [docs/commercial-spaces.md](docs/commercial-spaces.md). |
-| Sale / buy listings | Possible later (`/listings/sale`) — keep out of MVP to stay lean. |
+| Sale AVM / sale market stats | Search/get/link cover buy inventory; rental `markets_get` / `rent_estimate_get` only. |
 | Application / credit / tenant screening | Never. |
 | In-MCP watch DB | Stay stateless; agent memory + fresh search. |
 
@@ -87,6 +87,6 @@ Until then: develop and test entirely on disk (`make check`).
 - [x] Days-on-market / “new this week” helpers (`new_this_week`, `days_old_max` → RentCast `daysOld`)
 - [x] Multi-zip or neighborhood presets (`areas_resolve` + `neighborhood` / `zip_codes`; Seattle first)
 - [x] Pet / parking / laundry — **not** in RentCast API; soft `*_wanted` notes + `link_format` pets hint
-- [ ] Sale listings tier behind `--tool-tier` (keep core lean)
+- [x] Sale listings via required `intent=rent|buy` on search/get/link (same tools)
 - [ ] Sibling **commercial** MCP once a data source is chosen
 - [ ] More metro neighborhood presets beyond Seattle — demand-driven (friends first; expand if others actually use it)

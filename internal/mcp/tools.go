@@ -13,6 +13,7 @@ import (
 )
 
 type listingsSearchInput struct {
+	Intent        string  `json:"intent" jsonschema:"REQUIRED. rent or buy. If the human has not said which, ASK before searching — do not guess. rent = long-term lease; buy = purchase / for-sale."`
 	City          string  `json:"city,omitempty" jsonschema:"City name (case-sensitive upstream; e.g. Seattle)"`
 	State         string  `json:"state,omitempty" jsonschema:"2-letter state (e.g. WA)"`
 	ZipCode       string  `json:"zip_code,omitempty" jsonschema:"5-digit US zip code"`
@@ -22,12 +23,12 @@ type listingsSearchInput struct {
 	Latitude      float64 `json:"latitude,omitempty" jsonschema:"Search center latitude"`
 	Longitude     float64 `json:"longitude,omitempty" jsonschema:"Search center longitude"`
 	Radius        float64 `json:"radius,omitempty" jsonschema:"Radius in miles (max 100); use with lat/lng or address"`
-	PropertyType  string  `json:"property_type,omitempty" jsonschema:"apartment|house|condo|townhouse|manufactured|multi_family or RentCast type"`
+	PropertyType  string  `json:"property_type,omitempty" jsonschema:"apartment|house|condo|townhouse|manufactured|multi_family|land (land is sale-only). Comma/pipe list OK e.g. house,condo — ONE API call, not one per type."`
 	Bedrooms      string  `json:"bedrooms,omitempty" jsonschema:"Bedrooms; 0=studio; ranges like 1:2 ok"`
 	Bathrooms     string  `json:"bathrooms,omitempty" jsonschema:"Bathrooms; ranges ok"`
 	SquareFootage string  `json:"square_footage,omitempty" jsonschema:"Living area sqft; ranges ok"`
-	PriceMin      int     `json:"price_min,omitempty" jsonschema:"Minimum monthly rent USD"`
-	PriceMax      int     `json:"price_max,omitempty" jsonschema:"Maximum monthly rent USD"`
+	PriceMin      int     `json:"price_min,omitempty" jsonschema:"Minimum USD — monthly rent if intent=rent; purchase price if intent=buy"`
+	PriceMax      int     `json:"price_max,omitempty" jsonschema:"Maximum USD — monthly rent if intent=rent; purchase price if intent=buy"`
 	DaysOld       string  `json:"days_old,omitempty" jsonschema:"Max listing age in days (RentCast daysOld); e.g. 7 or *:7"`
 	DaysOldMax    int     `json:"days_old_max,omitempty" jsonschema:"Max days on market (shorthand for days_old)"`
 	NewThisWeek   bool    `json:"new_this_week,omitempty" jsonschema:"Only listings ≤7 days old (sets days_old_max=7)"`
@@ -48,6 +49,7 @@ type areasResolveInput struct {
 
 type listingsGetInput struct {
 	ListingID string `json:"listing_id" jsonschema:"RentCast listing id from listings_search"`
+	Intent    string `json:"intent" jsonschema:"REQUIRED. rent or buy — same intent used in listings_search. Sale and rental ids are different catalogs. Ask the human if unclear; do not guess."`
 }
 
 type rentEstimateInput struct {
@@ -63,12 +65,13 @@ type marketsGetInput struct {
 }
 
 type linkFormatInput struct {
+	Intent        string `json:"intent" jsonschema:"REQUIRED. rent or buy. Ask the human if they want to rent or purchase — do not guess."`
 	City          string `json:"city,omitempty" jsonschema:"City name"`
 	State         string `json:"state,omitempty" jsonschema:"2-letter state"`
 	ZipCode       string `json:"zip_code,omitempty" jsonschema:"Zip code"`
 	Neighborhood  string `json:"neighborhood,omitempty" jsonschema:"Optional neighborhood for search term"`
 	Bedrooms      string `json:"bedrooms,omitempty" jsonschema:"Optional bedrooms"`
-	PriceMax      int    `json:"price_max,omitempty" jsonschema:"Optional max monthly rent"`
+	PriceMax      int    `json:"price_max,omitempty" jsonschema:"Optional max USD (monthly rent if intent=rent; purchase price if intent=buy)"`
 	PropertyType  string `json:"property_type,omitempty" jsonschema:"apartment|house|…"`
 	PetsWanted    bool   `json:"pets_wanted,omitempty" jsonschema:"Hint for public search URL only"`
 	ParkingWanted bool   `json:"parking_wanted,omitempty" jsonschema:"Hint noted in response; not all sites support URL filters"`
@@ -82,6 +85,7 @@ func (s *Server) listingsSearch(ctx context.Context, _ *sdkmcp.CallToolRequest, 
 		return errResult("client not configured"), nil, nil
 	}
 	res, err := s.Client.SearchListings(ctx, rentcast.ListingsSearchRequest{
+		Intent:        in.Intent,
 		City:          in.City,
 		State:         in.State,
 		ZipCode:       in.ZipCode,
@@ -133,7 +137,7 @@ func (s *Server) listingsGet(ctx context.Context, _ *sdkmcp.CallToolRequest, in 
 	if s.Client == nil {
 		return errResult("client not configured"), nil, nil
 	}
-	res, err := s.Client.GetListing(ctx, in.ListingID)
+	res, err := s.Client.GetListing(ctx, in.ListingID, in.Intent)
 	if err != nil {
 		return errResult(err.Error()), nil, nil
 	}
@@ -192,8 +196,16 @@ func (s *Server) linkFormat(_ context.Context, _ *sdkmcp.CallToolRequest, in lin
 	if loc == "" {
 		return errResult("provide city+state and/or zip_code (neighborhood optional)"), nil, nil
 	}
-	// Public fallback: Zillow rental search (human click-around). Not a checkout.
-	u := "https://www.zillow.com/homes/for_rent/?" + url.Values{
+	intent, err := rentcast.NormalizeIntent(in.Intent)
+	if err != nil {
+		return errResult(err.Error()), nil, nil
+	}
+	path := "for_rent"
+	if intent == rentcast.IntentBuy {
+		path = "for_sale"
+	}
+	// Public fallback: Zillow rent or sale search (human click-around). Not a checkout.
+	u := "https://www.zillow.com/homes/" + path + "/?" + url.Values{
 		"searchQueryState": {fmt.Sprintf(`{"usersSearchTerm":%q}`, loc)},
 	}.Encode()
 	if in.Bedrooms != "" {
@@ -211,6 +223,7 @@ func (s *Server) linkFormat(_ context.Context, _ *sdkmcp.CallToolRequest, in lin
 		note += " Amenity URL hints are best-effort; confirm on the site. RentCast cannot filter pets/parking/laundry."
 	}
 	return jsonResult(map[string]any{
+		"intent":         intent,
 		"search_url":     u,
 		"location":       loc,
 		"pets_wanted":    in.PetsWanted,

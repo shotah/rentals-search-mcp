@@ -1,7 +1,14 @@
 package rentcast
 
+// IntentRent / IntentBuy are the only accepted listings_search intents.
+const (
+	IntentRent = "rent"
+	IntentBuy  = "buy"
+)
+
 // ListingsSearchRequest is the MCP-facing search input (mapped to RentCast query params).
 type ListingsSearchRequest struct {
+	Intent        string // required: rent | buy (aliases normalized)
 	City          string
 	State         string
 	ZipCode       string
@@ -42,6 +49,7 @@ type ListingContact struct {
 // Listing is a lean listing summary for agents.
 type Listing struct {
 	ID               string          `json:"id"`
+	Intent           string          `json:"intent,omitempty"` // rent | buy
 	FormattedAddress string          `json:"formatted_address,omitempty"`
 	City             string          `json:"city,omitempty"`
 	State            string          `json:"state,omitempty"`
@@ -63,6 +71,7 @@ type Listing struct {
 
 // ListingsSearchResult is returned by listings_search.
 type ListingsSearchResult struct {
+	Intent   string         `json:"intent"`
 	Listings []Listing      `json:"listings"`
 	Count    int            `json:"count"`
 	Total    int            `json:"total,omitempty"`

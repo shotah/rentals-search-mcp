@@ -13,14 +13,14 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/shotah/rentals-search-mcp" alt="License"></a>
 </p>
 
-Static Go [MCP](https://modelcontextprotocol.io) for **long-term residential rental
-search** (apartments, houses, condos, townhomes) via the
-[RentCast API](https://developers.rentcast.io/reference/introduction).
+Static Go [MCP](https://modelcontextprotocol.io) for **US residential listing
+search** — long-term rentals **or** homes for sale (apartments, houses, condos,
+townhomes) via the [RentCast API](https://developers.rentcast.io/reference/introduction).
 
 Built for [ai-gantry](https://github.com/shotah/ai-gantry) / LOCAL_AGENT: lean
 tool surface, stdio only, `CGO_ENABLED=0` binary that fits distroless.
-**Search + recommend + listing handoff — never applies, contacts landlords, or
-signs leases.**
+**Search + recommend + listing handoff — never applies, makes offers, contacts
+landlords/agents, or signs anything.**
 
 Naming follows
 [ai-gantry MCP tool naming](https://github.com/shotah/ai-gantry/blob/main/docs/mcp-naming.md):
@@ -35,10 +35,10 @@ host server id `rentals` → tools like `rentals__listings_search` (tool names d
 
 | In scope | Out of scope |
 | --- | --- |
-| Long-term **for-rent** residential listings (US) | Short-term / vacation stays (Airbnb, Google Hotels) |
-| Apartments, houses, condos, townhomes, multi-family | Retail / office / industrial **commercial** leases |
-| Rent estimates + zip market stats | Applying, touring, or signing leases |
-| Listing URL / contact handoff | Purchasing or escrow |
+| Long-term **for-rent** and **for-sale** residential listings (US) | Short-term / vacation stays (Airbnb, Google Hotels) |
+| Apartments, houses, condos, townhomes, multi-family (+ land when buying) | Retail / office / industrial **commercial** leases |
+| Rent estimates + zip rental market stats | Applying, touring, offers, escrow, or signing |
+| Listing URL / contact handoff | Acting as the renter or buyer |
 
 Commercial / tiny retail spaces (e.g. a small Seattle grocery mart) need a
 **different** data source and almost certainly a **different MCP package** —
@@ -48,8 +48,8 @@ see [docs/commercial-spaces.md](docs/commercial-spaces.md).
 
 | Tool | Description |
 | --- | --- |
-| `listings_search` | City/zip/neighborhood/radius search + beds/baths/rent/type + `new_this_week` / `days_old_max` |
-| `listings_get` | One listing by RentCast listing id |
+| `listings_search` | **Required `intent=rent\|buy`** + city/zip/neighborhood/radius + beds/baths/price/type + `new_this_week` / `days_old_max` |
+| `listings_get` | One listing by RentCast listing id (**same `intent`** — sale and rental catalogs differ) |
 | `rent_estimate_get` | Long-term rent AVM for an address (+ comps when available) |
 | `markets_get` | Aggregate rent / listing stats for a US zip code |
 | `areas_resolve` | Local neighborhood → zips / lat/lng (Seattle presets; no API) |
@@ -63,20 +63,24 @@ Host names: `rentals__listings_search`, `rentals__listings_get`,
 ### Agent contract
 
 ```text
-[areas_resolve] → listings_search → [listings_get] → present listing url / contact
-                              ↘ markets_get / rent_estimate_get for context
+ASK rent vs buy → [areas_resolve] → listings_search(intent=…) → [listings_get] → handoff
+                                              ↘ markets_get / rent_estimate_get (rent context)
 ```
 
-1. **Where + budget:** `listings_search` with `city`+`state`, `zip_code` /
+1. **Rent or buy:** if the human has not said which, **ask**. Then pass
+   `intent=rent` or `intent=buy` on every `listings_search` / `listings_get` /
+   `link_format`. Do not guess. `price_min` / `price_max` are monthly rent when
+   renting and purchase price when buying.
+2. **Where + budget:** `listings_search` with `city`+`state`, `zip_code` /
    `zip_codes`, or `neighborhood` (e.g. `Capitol Hill`), plus beds/price/type.
    Use `new_this_week` or `days_old_max` for fresh listings.
-2. **Neighborhoods:** `areas_resolve` (`list_all=true` or `neighborhood=Ballard`)
+3. **Neighborhoods:** `areas_resolve` (`list_all=true` or `neighborhood=Ballard`)
    when the human names a Seattle area — then pass `neighborhood` into search.
-3. **Detail:** `listings_get` when the human picks a candidate id.
-4. **Context (optional):** `markets_get` for zip averages; `rent_estimate_get`
-   when comparing a specific address to “fair rent”.
-5. **Handoff:** give the human the listing URL / contact fields. Do **not**
-   impersonate the renter or submit applications.
+4. **Detail:** `listings_get` when the human picks a candidate id (same `intent`).
+5. **Context (optional):** `markets_get` for zip **rental** averages;
+   `rent_estimate_get` when comparing a specific address to “fair rent”.
+6. **Handoff:** give the human the listing URL / contact fields. Do **not**
+   impersonate the renter or buyer, apply, or make offers.
 
 `pets_wanted` / `parking_wanted` / `laundry_wanted` are **soft preferences only**
 — RentCast does not expose those filters; confirm on `listing_url`.

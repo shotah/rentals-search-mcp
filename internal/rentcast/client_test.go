@@ -9,6 +9,34 @@ import (
 	"testing"
 )
 
+func TestNormalizeIntent(t *testing.T) {
+	cases := map[string]string{
+		"rent":     IntentRent,
+		"Rental":   IntentRent,
+		"for-rent": IntentRent,
+		"lease":    IntentRent,
+		"buy":      IntentBuy,
+		"purchase": IntentBuy,
+		"for_sale": IntentBuy,
+		"Sale":     IntentBuy,
+	}
+	for in, want := range cases {
+		got, err := NormalizeIntent(in)
+		if err != nil {
+			t.Fatalf("NormalizeIntent(%q): %v", in, err)
+		}
+		if got != want {
+			t.Fatalf("NormalizeIntent(%q)=%q want %q", in, got, want)
+		}
+	}
+	if _, err := NormalizeIntent(""); err == nil {
+		t.Fatal("expected empty intent error")
+	}
+	if _, err := NormalizeIntent("maybe"); err == nil {
+		t.Fatal("expected unknown intent error")
+	}
+}
+
 func TestNormalizePropertyType(t *testing.T) {
 	cases := map[string]string{
 		"":                "",
@@ -22,6 +50,10 @@ func TestNormalizePropertyType(t *testing.T) {
 		"duplex":          "Multi-Family",
 		"Single Family":   "Single Family",
 		"apartment|condo": "Apartment|Condo",
+		"house,condo":     "Single Family|Condo",
+		"house, condo":    "Single Family|Condo",
+		"land":            "Land",
+		"lot":             "Land",
 	}
 	for in, want := range cases {
 		if got := NormalizePropertyType(in); got != want {
@@ -55,10 +87,10 @@ func TestNewFromEnvOK(t *testing.T) {
 func TestStubMethods(t *testing.T) {
 	s := NewStub()
 	ctx := t.Context()
-	if _, err := s.SearchListings(ctx, ListingsSearchRequest{City: "Seattle", State: "WA"}); err != nil {
+	if _, err := s.SearchListings(ctx, ListingsSearchRequest{Intent: IntentRent, City: "Seattle", State: "WA"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetListing(ctx, "abc"); err != nil {
+	if _, err := s.GetListing(ctx, "abc", IntentRent); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.RentEstimate(ctx, RentEstimateRequest{Address: "1 Main St, Seattle, WA 98101"}); err != nil {
@@ -88,18 +120,21 @@ func TestFormatPriceRange(t *testing.T) {
 
 func TestValidateSearchRequest(t *testing.T) {
 	if err := validateSearchRequest(ListingsSearchRequest{}); err == nil {
-		t.Fatal("expected location error")
+		t.Fatal("expected intent error")
 	}
-	if err := validateSearchRequest(ListingsSearchRequest{City: "Seattle", State: "WA"}); err != nil {
+	if err := validateSearchRequest(ListingsSearchRequest{City: "Seattle", State: "WA"}); err == nil {
+		t.Fatal("expected intent error")
+	}
+	if err := validateSearchRequest(ListingsSearchRequest{Intent: IntentRent, City: "Seattle", State: "WA"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := validateSearchRequest(ListingsSearchRequest{ZipCode: "98101"}); err != nil {
+	if err := validateSearchRequest(ListingsSearchRequest{Intent: IntentBuy, ZipCode: "98101"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := validateSearchRequest(ListingsSearchRequest{Latitude: 47.6, Longitude: -122.3}); err != nil {
+	if err := validateSearchRequest(ListingsSearchRequest{Intent: IntentRent, Latitude: 47.6, Longitude: -122.3}); err != nil {
 		t.Fatal(err)
 	}
-	if err := validateSearchRequest(ListingsSearchRequest{ZipCode: "98101", Radius: 200}); err == nil {
+	if err := validateSearchRequest(ListingsSearchRequest{Intent: IntentRent, ZipCode: "98101", Radius: 200}); err == nil {
 		t.Fatal("expected radius error")
 	}
 }
@@ -189,6 +224,7 @@ func TestSearchListingsHTTP(t *testing.T) {
 
 	c := &Client{APIKey: "test-key", BaseURL: srv.URL, HTTPClient: srv.Client()}
 	res, err := c.SearchListings(t.Context(), ListingsSearchRequest{
+		Intent:       IntentRent,
 		City:         "Seattle",
 		State:        "wa",
 		PropertyType: "apartment",
@@ -201,6 +237,9 @@ func TestSearchListingsHTTP(t *testing.T) {
 	}
 	if res.Count != 2 || res.Total != 42 || res.Limit != 10 {
 		t.Fatalf("page %+v", res)
+	}
+	if res.Intent != IntentRent || res.Query["intent"] != IntentRent {
+		t.Fatalf("intent %#v", res)
 	}
 	if res.Query["state"] != "WA" || res.Query["property_type"] != "Apartment" {
 		t.Fatalf("query %#v", res.Query)
@@ -250,7 +289,7 @@ func TestSearchListingsNeighborhoodHTTP(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	c := &Client{APIKey: "k", BaseURL: srv.URL, HTTPClient: srv.Client()}
-	res, err := c.SearchListings(t.Context(), ListingsSearchRequest{Neighborhood: "Capitol Hill"})
+	res, err := c.SearchListings(t.Context(), ListingsSearchRequest{Intent: IntentRent, Neighborhood: "Capitol Hill"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,7 +333,7 @@ func TestGetListingHTTP(t *testing.T) {
 		APIKey: "k", BaseURL: srv.URL, HTTPClient: srv.Client(),
 		Usage: NewUsageTrackerForTest(filepath.Join(t.TempDir(), "usage.json"), 50),
 	}
-	listing, err := c.GetListing(t.Context(), "abc")
+	listing, err := c.GetListing(t.Context(), "abc", IntentRent)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,10 +345,95 @@ func TestGetListingHTTP(t *testing.T) {
 	}
 }
 
+func TestSearchSaleListingsHTTP(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/listings/sale" {
+			t.Fatalf("path %s", r.URL.Path)
+		}
+		if r.URL.Query().Get("propertyType") != "Condo" {
+			t.Fatalf("propertyType %q", r.URL.Query().Get("propertyType"))
+		}
+		if r.URL.Query().Get("price") != "*:500000" {
+			t.Fatalf("price %q", r.URL.Query().Get("price"))
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			{
+				"id":               "789-Pine-St,-Seattle,-WA-98101",
+				"formattedAddress": "789 Pine St, Seattle, WA 98101",
+				"city":             "Seattle",
+				"state":            "WA",
+				"zipCode":          "98101",
+				"propertyType":     "Condo",
+				"bedrooms":         2,
+				"bathrooms":        2,
+				"price":            475000,
+				"status":           "Active",
+				"daysOnMarket":     6,
+			},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	c := &Client{APIKey: "k", BaseURL: srv.URL, HTTPClient: srv.Client()}
+	res, err := c.SearchListings(t.Context(), ListingsSearchRequest{
+		Intent: "purchase", City: "Seattle", State: "WA", PropertyType: "condo", PriceMax: 500000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Intent != IntentBuy || res.Count != 1 || res.Listings[0].Price != 475000 {
+		t.Fatalf("%+v", res)
+	}
+	if res.Listings[0].Intent != IntentBuy {
+		t.Fatalf("listing intent %q", res.Listings[0].Intent)
+	}
+	if !strings.Contains(res.Summary, "$475000") || strings.Contains(res.Summary, "/mo") {
+		t.Fatalf("sale summary should be purchase price, got %q", res.Summary)
+	}
+	if !strings.Contains(res.Note, "offers") {
+		t.Fatalf("note %q", res.Note)
+	}
+	if !strings.Contains(res.Listings[0].ListingURL, "for+sale") && !strings.Contains(res.Listings[0].ListingURL, "for sale") {
+		t.Fatalf("listing_url %q", res.Listings[0].ListingURL)
+	}
+}
+
+func TestGetListingSaleHTTP(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/listings/sale/sale-id" {
+			t.Fatalf("path %s", r.URL.Path)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":               "sale-id",
+			"formattedAddress": "9 Elm St, Denver, CO 80202",
+			"city":             "Denver",
+			"state":            "CO",
+			"price":            610000,
+			"propertyType":     "Single Family",
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	c := &Client{APIKey: "k", BaseURL: srv.URL, HTTPClient: srv.Client()}
+	listing, err := c.GetListing(t.Context(), "sale-id", IntentBuy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if listing.Intent != IntentBuy || listing.Price != 610000 {
+		t.Fatalf("%+v", listing)
+	}
+	if !strings.Contains(listing.ListingURL, "for+sale") && !strings.Contains(listing.ListingURL, "for sale") {
+		t.Fatalf("listing_url %q", listing.ListingURL)
+	}
+}
+
 func TestGetListingRequiresID(t *testing.T) {
 	c := &Client{APIKey: "k"}
-	if _, err := c.GetListing(t.Context(), "  "); err == nil {
+	if _, err := c.GetListing(t.Context(), "  ", IntentRent); err == nil {
 		t.Fatal("expected error")
+	}
+	if _, err := c.GetListing(t.Context(), "abc", ""); err == nil {
+		t.Fatal("expected intent error")
 	}
 }
 
@@ -401,16 +525,20 @@ func TestHTTPError(t *testing.T) {
 }
 
 func TestSummarizeEmpty(t *testing.T) {
-	s := summarizeListings(nil, 0, 10, 0)
+	s := summarizeListings(nil, 0, 10, 0, IntentRent)
 	if !strings.Contains(s, "No listings") {
 		t.Fatalf("%q", s)
 	}
 }
 
-func TestGoogleRentalSearchURL(t *testing.T) {
-	u := googleRentalSearchURL("902 N 86th St, Seattle, WA 98103")
+func TestGoogleListingSearchURL(t *testing.T) {
+	u := googleListingSearchURL("902 N 86th St, Seattle, WA 98103", IntentRent)
 	if !strings.Contains(u, "google.com/search?q=") || !strings.Contains(u, "rental") {
 		t.Fatalf("%q", u)
+	}
+	buy := googleListingSearchURL("902 N 86th St, Seattle, WA 98103", IntentBuy)
+	if !strings.Contains(buy, "for+sale") && !strings.Contains(buy, "for sale") {
+		t.Fatalf("buy url %q", buy)
 	}
 	if got := listingHandoffURL(Listing{FormattedAddress: "9 Elm St, Denver, CO 80202"}); !strings.Contains(got, "google.com/search") {
 		t.Fatalf("%q", got)

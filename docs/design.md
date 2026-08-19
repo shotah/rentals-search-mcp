@@ -2,8 +2,8 @@
 
 ## Goal
 
-Help friends (and Tim) search **long-term residential rentals** in the US —
-apartments and houses — through ai-gantry / LOCAL_AGENT with a small, name-stable
+Help friends (and Tim) search **US residential listings** — long-term rentals
+**or** homes for sale — through ai-gantry / LOCAL_AGENT with a small, name-stable
 MCP surface.
 
 Sibling of [`flights-search-mcp`](../../flights-search-mcp): same packaging
@@ -13,7 +13,7 @@ vibes (static Go, stdio MCP, SerpAPI-style lean tools), different upstream.
 
 | Option | Fit | Notes |
 | --- | --- | --- |
-| **RentCast** | Best default for MVP | Official long-term rental listings + rent AVM + zip markets; simple `X-Api-Key` |
+| **RentCast** | Best default for MVP | Official long-term rental + sale listings + rent AVM + zip markets; simple `X-Api-Key` |
 | SerpAPI Google Hotels | Wrong inventory | Vacation / hotel stays with check-in/out — not month-to-month leases |
 | Zillow / Apartments.com official APIs | Restricted | Partner programs; not a clean public key for a personal MCP |
 | RapidAPI scrapers | Fragile | TOS / breakage risk |
@@ -25,6 +25,8 @@ Docs:
 
 - [Rental listings](https://developers.rentcast.io/reference/rental-listings-long-term)
 - [Rental listing by id](https://developers.rentcast.io/reference/rental-listing-long-term-by-id)
+- [Sale listings](https://developers.rentcast.io/reference/sale-listings)
+- [Sale listing by id](https://developers.rentcast.io/reference/sale-listing-by-id)
 - [Rent estimate](https://developers.rentcast.io/reference/rent-estimate-long-term)
 - [Market statistics](https://developers.rentcast.io/reference/market-statistics)
 - [Property types](https://developers.rentcast.io/reference/property-types)
@@ -47,22 +49,24 @@ Canonical rules:
 
 ### `listings_search`
 
-Maps to `GET /listings/rental/long-term`.
+Maps to `GET /listings/rental/long-term` (`intent=rent`) or `GET /listings/sale`
+(`intent=buy`).
 
 Agent-facing args (snake_case):
 
 | Arg | RentCast | Notes |
 | --- | --- | --- |
+| `intent` | (path) | **Required** `rent` or `buy`. If the human has not said which, the agent must ask — do not guess or default. |
 | `city` / `state` | `city` / `state` | Case-sensitive on their side — normalize carefully |
 | `zip_code` | `zipCode` | Prefer when human gives a zip |
 | `zip_codes` | (client filter) | CSV/pipe multi-zip; one API call + filter when city/state set |
 | `neighborhood` | lat/lng or zips | Local presets (`areas_resolve`); Seattle first |
 | `address` | `address` | Full address; optional with `radius` |
 | `latitude` / `longitude` / `radius` | same | Radius miles, max 100 |
-| `property_type` | `propertyType` | Alias map below |
+| `property_type` | `propertyType` | Alias map below; comma/pipe list (`house,condo`) is **one** call |
 | `bedrooms` / `bathrooms` | same | `0` = studio; support `min:max` ranges |
 | `square_footage` | `squareFootage` | Ranges ok |
-| `price` / `price_min` / `price_max` | `price` | Prefer min/max ergonomics for agents |
+| `price` / `price_min` / `price_max` | `price` | Monthly rent when `intent=rent`; purchase price when `intent=buy` |
 | `new_this_week` / `days_old_max` / `days_old` | `daysOld` | Fresh listings (≤7 days shorthand) |
 | `pets_wanted` / `parking_wanted` / `laundry_wanted` | — | Soft notes only; RentCast has no amenity filters |
 | `status` | `status` | Default `Active` |
@@ -83,10 +87,11 @@ Property-type aliases (MCP → RentCast):
 | `townhouse` / `townhome` | `Townhouse` |
 | `manufactured` / `mobile` | `Manufactured` |
 | `multi_family` / `duplex` | `Multi-Family` |
+| `land` / `lot` | `Land` (sale listings) |
 
 Response shape (lean):
 
-- `listings[]` — id, address, rent, beds/baths, sqft, property_type, status,
+- `listings[]` — id, `intent`, address, price, beds/baths, sqft, property_type, status,
   days-ish fields if present, `listing_url`, contact snippet
 - `summary` — short recommendation blurb for the agent
 - `count` / pagination hints
@@ -94,7 +99,8 @@ Response shape (lean):
 
 ### `listings_get`
 
-`GET /listings/rental/long-term/{id}` — full record for one listing.
+`GET /listings/rental/long-term/{id}` or `GET /listings/sale/{id}` — same
+`intent` as search (sale and rental ids are different catalogs).
 
 ### `rent_estimate_get`
 
@@ -107,8 +113,8 @@ Zip-level aggregates — “what does Capitol Hill rent look like?” via zip(s)
 
 ### `link_format`
 
-No API. Build a public search URL (e.g. Zillow / Apartments.com query string)
-as a **fallback** when quota is tight or the human wants to click around.
+No API. Build a public search URL (Zillow `for_rent` or `for_sale` from
+`intent`) as a **fallback** when quota is tight or the human wants to click around.
 
 ### `account_get`
 
@@ -137,8 +143,8 @@ rentals-search-mcp/
 
 - Short-term stays
 - Commercial retail / office
-- Sale inventory
-- Mutations (apply, email, SMS)
+- Sale AVM / sale market stats (rental `markets_get` / `rent_estimate_get` only)
+- Mutations (apply, offer, email, SMS)
 - GitHub / release automation until a **personal** remote exists
 
 ## Commercial digression

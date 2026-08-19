@@ -23,7 +23,7 @@ var ServerVersion = "dev"
 // RentalsAPI is the RentCast surface used by tools (mockable in tests).
 type RentalsAPI interface {
 	SearchListings(ctx context.Context, req rentcast.ListingsSearchRequest) (*rentcast.ListingsSearchResult, error)
-	GetListing(ctx context.Context, id string) (*rentcast.ListingGetResult, error)
+	GetListing(ctx context.Context, id, intent string) (*rentcast.ListingGetResult, error)
 	RentEstimate(ctx context.Context, req rentcast.RentEstimateRequest) (*rentcast.RentEstimateResult, error)
 	MarketStats(ctx context.Context, zipCode string) (*rentcast.MarketStatsResult, error)
 	AccountUsage() *rentcast.Usage
@@ -65,17 +65,20 @@ func (s *Server) newMCPServer() *sdkmcp.Server {
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "listings_search",
-		Description: "Search long-term residential rentals (burns 1 RentCast request). Free tier ≈50/month — use sparingly. " +
+		Description: "Search US residential listings to rent OR buy (burns 1 RentCast request). Free tier ≈50/month — use sparingly. " +
+			"REQUIRED intent=rent or intent=buy. If the human has not said rent vs buy, ASK first — do not guess. " +
 			"THRIFTY: pass multiple neighborhoods as comma-separated neighborhood=Ballard,Fremont OR zip_codes=98107,98103 " +
-			"with city+state for ONE call — never one search per area. " +
+			"AND/OR property_type=house,condo for ONE call — never one search per area or type. " +
 			"Filter tightly (bedrooms, price_max, new_this_week). Soft pets/parking/laundry prefs are not API filters. " +
-			"Returns listing_url / contact handoff. Does not apply or contact landlords.",
+			"Returns listing_url / contact handoff — ALWAYS show each listing_url so the human can review. " +
+			"Does not apply, make offers, or contact landlords/agents.",
 	}, s.listingsSearch)
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "listings_get",
 		Description: "Get one listing by id (burns 1 RentCast request). Only after the human picks a candidate from search. " +
-			"Do not prefetch many ids. Does not apply or contact landlords.",
+			"REQUIRED intent=rent or intent=buy (same catalog as listings_search — sale and rental ids differ). " +
+			"Do not prefetch many ids. Does not apply, make offers, or contact landlords/agents.",
 	}, s.listingsGet)
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
@@ -97,8 +100,9 @@ func (s *Server) newMCPServer() *sdkmcp.Server {
 	}, s.areasResolve)
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
-		Name:        "link_format",
-		Description: "FREE public rental search URL fallback (no RentCast call). Prefer when usage.requests_left is low.",
+		Name: "link_format",
+		Description: "FREE public search URL fallback (no RentCast call). REQUIRED intent=rent or intent=buy. " +
+			"Ask the human if rent vs buy is unclear. Prefer when usage.requests_left is low.",
 	}, s.linkFormat)
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
@@ -151,11 +155,11 @@ func SelfTest() error {
 
 	ctx := context.Background()
 	if _, err := stub.SearchListings(ctx, rentcast.ListingsSearchRequest{
-		City: "Seattle", State: "WA", Limit: 5,
+		Intent: rentcast.IntentRent, City: "Seattle", State: "WA", Limit: 5,
 	}); err != nil {
 		return fmt.Errorf("stub SearchListings: %w", err)
 	}
-	if _, err := stub.GetListing(ctx, "self-test-id"); err != nil {
+	if _, err := stub.GetListing(ctx, "self-test-id", rentcast.IntentRent); err != nil {
 		return fmt.Errorf("stub GetListing: %w", err)
 	}
 	if _, err := stub.RentEstimate(ctx, rentcast.RentEstimateRequest{

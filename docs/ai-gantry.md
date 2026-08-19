@@ -9,8 +9,8 @@ Agent recipes (TOOLS.md sketch, tool cheat sheet): **[agent.md](agent.md)**.
 ## `mcp.toml`
 
 ```toml
-# Long-term residential rentals (shotah/rentals-search-mcp) — docs/rentals.md
-# Recommend-only: listings + rent estimate + market stats. No applications.
+# Residential listings — rent or buy (shotah/rentals-search-mcp) — docs/rentals.md
+# Recommend-only: listings + rent estimate + market stats. No applications or offers.
 [[server]]
 name = "rentals"
 command = "rentals-search-mcp"

@@ -67,8 +67,13 @@ func (c *Client) attachUsage() *Usage {
 	return c.Usage.Snapshot()
 }
 
-// SearchListings calls GET /listings/rental/long-term.
+// SearchListings calls GET /listings/rental/long-term or GET /listings/sale.
 func (c *Client) SearchListings(ctx context.Context, req ListingsSearchRequest) (*ListingsSearchResult, error) {
+	intent, err := NormalizeIntent(req.Intent)
+	if err != nil {
+		return nil, err
+	}
+	req.Intent = intent
 	expanded, expandNotes, err := ExpandSearchRequest(req)
 	if err != nil {
 		return nil, err
@@ -82,14 +87,14 @@ func (c *Client) SearchListings(ctx context.Context, req ListingsSearchRequest) 
 	params.Set("includeTotalCount", "true")
 
 	var raw []rawListing
-	hdr, err := c.getJSON(ctx, "/listings/rental/long-term", params, &raw)
+	hdr, err := c.getJSON(ctx, listingsSearchPath(intent), params, &raw)
 	if err != nil {
 		return nil, err
 	}
 
 	listings := make([]Listing, 0, len(raw))
 	for i := range raw {
-		listings = append(listings, raw[i].toListing())
+		listings = append(listings, raw[i].toListing(intent))
 	}
 
 	// Client-side zip narrowing for multi-zip / neighborhood presets (one API call).
@@ -112,35 +117,39 @@ func (c *Client) SearchListings(ctx context.Context, req ListingsSearchRequest) 
 		}
 	}
 
-	note := "Present listing_url / contact fields to the human. Do not apply or message landlords. " +
-		"listing_url is agent/office website when present, else a Google search for the address (RentCast has no Zillow/Realtor deep-link ids)."
+	note := searchHandoffNote(intent)
 	note = joinNotes(note, expandNotes)
 
 	return &ListingsSearchResult{
+		Intent:   intent,
 		Listings: listings,
 		Count:    len(listings),
 		Total:    total,
 		Limit:    limit,
 		Offset:   offset,
-		Summary:  summarizeListings(listings, total, limit, offset),
+		Summary:  summarizeListings(listings, total, limit, offset, intent),
 		Query:    queryEcho,
 		Note:     note,
 		Usage:    c.attachUsage(),
 	}, nil
 }
 
-// GetListing calls GET /listings/rental/long-term/{id}.
-func (c *Client) GetListing(ctx context.Context, id string) (*ListingGetResult, error) {
+// GetListing calls GET /listings/rental/long-term/{id} or GET /listings/sale/{id}.
+func (c *Client) GetListing(ctx context.Context, id, intent string) (*ListingGetResult, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return nil, errors.New("listing id is required")
 	}
+	normalized, err := NormalizeIntent(intent)
+	if err != nil {
+		return nil, err
+	}
 	var raw rawListing
-	if _, err := c.getJSON(ctx, "/listings/rental/long-term/"+url.PathEscape(id), nil, &raw); err != nil {
+	if _, err := c.getJSON(ctx, listingGetPath(id, normalized), nil, &raw); err != nil {
 		return nil, err
 	}
 	return &ListingGetResult{
-		Listing: raw.toListing(),
+		Listing: raw.toListing(normalized),
 		Usage:   c.attachUsage(),
 	}, nil
 }
@@ -230,13 +239,15 @@ func (c *Client) MarketStats(ctx context.Context, zipCode string) (*MarketStatsR
 }
 
 // NormalizePropertyType maps agent aliases to RentCast propertyType values.
-// Pipe-separated multi-values are normalized part-by-part.
+// Comma / pipe / semicolon lists become one RentCast multi-value (house,condo → Single Family|Condo).
 func NormalizePropertyType(raw string) string {
 	s := strings.TrimSpace(raw)
 	if s == "" {
 		return ""
 	}
-	if strings.Contains(s, "|") {
+	if strings.ContainsAny(s, "|,;") {
+		s = strings.ReplaceAll(s, ",", "|")
+		s = strings.ReplaceAll(s, ";", "|")
 		parts := strings.Split(s, "|")
 		out := make([]string, 0, len(parts))
 		for _, p := range parts {
@@ -267,13 +278,59 @@ func normalizeOnePropertyType(raw string) string {
 		return "Manufactured"
 	case "multi_family", "multifamily", "duplex", "triplex", "fourplex":
 		return "Multi-Family"
+	case "land", "lot", "lots":
+		return "Land"
 	default:
 		// Pass through already-correct RentCast casing if provided.
 		return s
 	}
 }
 
+// NormalizeIntent maps agent aliases to IntentRent or IntentBuy.
+// Empty or unknown values error so the agent must ask the human.
+func NormalizeIntent(raw string) (string, error) {
+	s := strings.ToLower(strings.TrimSpace(raw))
+	s = strings.ReplaceAll(s, "-", "_")
+	s = strings.ReplaceAll(s, " ", "_")
+	switch s {
+	case IntentRent, "rental", "rentals", "lease", "leasing", "for_rent", "forrent":
+		return IntentRent, nil
+	case IntentBuy, "sale", "sales", "purchase", "purchasing", "buying", "for_sale", "forsale":
+		return IntentBuy, nil
+	case "":
+		return "", errors.New("intent is required (rent or buy). Ask the human whether they want to rent or buy — do not guess")
+	default:
+		return "", fmt.Errorf("intent must be rent or buy (got %q). Ask the human if unclear — do not guess", raw)
+	}
+}
+
+func listingsSearchPath(intent string) string {
+	if intent == IntentBuy {
+		return "/listings/sale"
+	}
+	return "/listings/rental/long-term"
+}
+
+func listingGetPath(id, intent string) string {
+	if intent == IntentBuy {
+		return "/listings/sale/" + url.PathEscape(id)
+	}
+	return "/listings/rental/long-term/" + url.PathEscape(id)
+}
+
+func searchHandoffNote(intent string) string {
+	action := "Do not apply or message landlords."
+	if intent == IntentBuy {
+		action = "Do not make offers or contact listing agents on the human's behalf."
+	}
+	return "ALWAYS present each listing_url to the human so they can review. " + action +
+		" listing_url is agent/office website when present, else a Google search for the address (RentCast has no Zillow/Realtor deep-link ids)."
+}
+
 func validateSearchRequest(req ListingsSearchRequest) error {
+	if _, err := NormalizeIntent(req.Intent); err != nil {
+		return err
+	}
 	hasZip := strings.TrimSpace(req.ZipCode) != "" || len(req.ZipFilter) > 0
 	hasCityState := strings.TrimSpace(req.City) != "" && strings.TrimSpace(req.State) != ""
 	hasAddress := strings.TrimSpace(req.Address) != ""
@@ -312,6 +369,9 @@ func normalizePage(limit, offset int) (int, int) {
 func searchParams(req ListingsSearchRequest, limit, offset int) (url.Values, map[string]any) {
 	params := url.Values{}
 	echo := map[string]any{}
+	if intent, err := NormalizeIntent(req.Intent); err == nil {
+		echo["intent"] = intent
+	}
 
 	if v := strings.TrimSpace(req.City); v != "" {
 		params.Set("city", v)
@@ -503,9 +563,10 @@ type rawListing struct {
 	ListingOffice    *rawContact `json:"listingOffice"`
 }
 
-func (r rawListing) toListing() Listing {
+func (r rawListing) toListing(intent string) Listing {
 	out := Listing{
 		ID:               r.ID,
+		Intent:           intent,
 		FormattedAddress: r.FormattedAddress,
 		City:             r.City,
 		State:            r.State,
@@ -547,7 +608,7 @@ func contactFromRaw(c *rawContact) *ListingContact {
 //
 // RentCast does not return Zillow ZPIDs or Realtor.com M-ids, so we cannot build
 // stable deep links like realtor.com/rentals/details/…_M…. Google search for
-// "{address} rental" reliably surfaces the live listing (photos + contact).
+// "{address} rental" or "{address} for sale" reliably surfaces the live listing.
 func listingHandoffURL(l Listing) string {
 	if l.Agent != nil && l.Agent.Website != "" {
 		return l.Agent.Website
@@ -555,7 +616,7 @@ func listingHandoffURL(l Listing) string {
 	if l.Office != nil && l.Office.Website != "" {
 		return l.Office.Website
 	}
-	return googleRentalSearchURL(listingAddress(l))
+	return googleListingSearchURL(listingAddress(l), l.Intent)
 }
 
 func listingAddress(l Listing) string {
@@ -575,13 +636,17 @@ func listingAddress(l Listing) string {
 	return strings.Join(parts, " ")
 }
 
-// googleRentalSearchURL is the address handoff when we lack a portal property id.
-func googleRentalSearchURL(addr string) string {
+// googleListingSearchURL is the address handoff when we lack a portal property id.
+func googleListingSearchURL(addr, intent string) string {
 	addr = strings.TrimSpace(addr)
 	if addr == "" {
 		return ""
 	}
-	return "https://www.google.com/search?q=" + url.QueryEscape(addr+" rental")
+	suffix := " rental"
+	if intent == IntentBuy {
+		suffix = " for sale"
+	}
+	return "https://www.google.com/search?q=" + url.QueryEscape(addr+suffix)
 }
 
 type rawRentEstimate struct {
@@ -615,7 +680,7 @@ type rawMarket struct {
 	RentalData *rawRentalData `json:"rentalData"`
 }
 
-func summarizeListings(listings []Listing, total, limit, offset int) string {
+func summarizeListings(listings []Listing, total, limit, offset int, intent string) string {
 	if len(listings) == 0 {
 		return "No listings matched. Widen beds/price, try a nearby zip, or drop property_type."
 	}
@@ -636,8 +701,8 @@ func summarizeListings(listings []Listing, total, limit, offset int) string {
 	for i := range n {
 		l := ranked[i]
 		beds := formatBeds(l.Bedrooms)
-		parts = append(parts, fmt.Sprintf("%s — $%.0f/mo, %s, %s (%d days on market)",
-			shortAddress(l), l.Price, beds, orDefault(l.PropertyType, "home"), l.DaysOnMarket))
+		parts = append(parts, fmt.Sprintf("%s — %s, %s, %s (%d days on market)",
+			shortAddress(l), formatListingPrice(l.Price, intent), beds, orDefault(l.PropertyType, "home"), l.DaysOnMarket))
 	}
 
 	pageNote := fmt.Sprintf("Showing %d", len(listings))
@@ -657,10 +722,21 @@ func summarizeListings(listings []Listing, total, limit, offset int) string {
 	if newThisWeek > 0 {
 		freshNote = fmt.Sprintf(" %d listing(s) look new this week (≤7 days on market).", newThisWeek)
 	}
+	handoff := " ALWAYS include each listing_url so the human can review — do not apply for them."
+	if intent == IntentBuy {
+		handoff = " ALWAYS include each listing_url so the human can review — do not make offers for them."
+	}
 	_ = limit
 	return pageNote + ". Top picks (freshest / value): " + strings.Join(parts, "; ") + "." +
 		freshNote +
-		" Hand the human listing_url or agent/office contact — do not apply for them."
+		handoff
+}
+
+func formatListingPrice(price float64, intent string) string {
+	if intent == IntentBuy {
+		return fmt.Sprintf("$%.0f", price)
+	}
+	return fmt.Sprintf("$%.0f/mo", price)
 }
 
 func shortAddress(l Listing) string {

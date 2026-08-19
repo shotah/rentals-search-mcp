@@ -13,6 +13,11 @@ func NewStub() *Stub {
 }
 
 func (s Stub) SearchListings(_ context.Context, req ListingsSearchRequest) (*ListingsSearchResult, error) {
+	intent, err := NormalizeIntent(req.Intent)
+	if err != nil {
+		return nil, err
+	}
+	req.Intent = intent
 	expanded, notes, err := ExpandSearchRequest(req)
 	if err != nil {
 		return nil, err
@@ -24,21 +29,26 @@ func (s Stub) SearchListings(_ context.Context, req ListingsSearchRequest) (*Lis
 	limit, offset := normalizePage(req.Limit, req.Offset)
 	_, query := searchParams(req, limit, offset)
 	return &ListingsSearchResult{
+		Intent:   intent,
 		Listings: []Listing{},
 		Count:    0,
 		Total:    0,
 		Limit:    limit,
 		Offset:   offset,
-		Summary:  summarizeListings(nil, 0, limit, offset),
+		Summary:  summarizeListings(nil, 0, limit, offset, intent),
 		Query:    query,
 		Note:     joinNotes("stub client", notes),
 		Usage:    s.Usage.Snapshot(),
 	}, nil
 }
 
-func (s Stub) GetListing(_ context.Context, id string) (*ListingGetResult, error) {
+func (s Stub) GetListing(_ context.Context, id, intent string) (*ListingGetResult, error) {
+	normalized, err := NormalizeIntent(intent)
+	if err != nil {
+		return nil, err
+	}
 	return &ListingGetResult{
-		Listing: Listing{ID: id, Status: "stub"},
+		Listing: Listing{ID: id, Intent: normalized, Status: "stub"},
 		Usage:   s.Usage.Snapshot(),
 	}, nil
 }
