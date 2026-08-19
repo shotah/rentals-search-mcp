@@ -19,6 +19,11 @@ ifeq ($(OS),Windows_NT)
 BINARY := bin/rentals-search-mcp.exe
 endif
 
+# Pure-Go by default. SteamOS (and similar) often has gcc without libc headers,
+# so Go's net package dies in cgo_linux.go. Matches cli / distroless / GoReleaser.
+# Override with CGO_ENABLED=1 if you have a full C toolchain and want cgo.
+export CGO_ENABLED ?= 0
+
 ##@ Getting oriented
 
 help: ## Show this help
@@ -135,7 +140,7 @@ else
 	chmod +x .git/hooks/pre-commit
 endif
 	@echo "Installed .git/hooks/pre-commit"
-	@echo "Hook runs: goimports-reviser -> golangci-lint -> go test -> coverage >= 70%"
+	@echo "Hook runs: CGO_ENABLED=0 goimports-reviser -> golangci-lint -> go test -> coverage >= 70%"
 
 version: ## Show next patch (dry-run)
 	@go run ./cmd/release -dry-run

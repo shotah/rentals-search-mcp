@@ -123,6 +123,10 @@ make cli                  # static binary → ./bin/rentals-search-mcp
 make self-test
 ```
 
+Hooks, tests, and `make tools` run with `CGO_ENABLED=0` (same as the shipped
+binary). That matters on SteamOS and other hosts that have `gcc` but no libc
+headers — otherwise Go's `net` package tries cgo and fails.
+
 Coverage **≥70%** is mandatory locally (`make coverage` / pre-commit) and in CI.
 
 Status: **MVP client wired**. US-wide long-term residential search (Seattle is just

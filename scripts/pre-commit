@@ -3,6 +3,9 @@
 # Install once: make install-hooks  (requires local git init)
 set -eu
 
+# Match Makefile / shipped binary. gcc-without-headers (SteamOS) breaks net/cgo.
+export CGO_ENABLED="${CGO_ENABLED:-0}"
+
 ROOT=$(git rev-parse --show-toplevel)
 cd "$ROOT"
 

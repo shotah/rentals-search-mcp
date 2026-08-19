@@ -13,6 +13,8 @@ jobs:
   check:
     name: Build, lint, test
     runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
     steps:
       - uses: actions/checkout@v4
         with:
