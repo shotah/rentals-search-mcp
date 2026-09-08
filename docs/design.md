@@ -128,6 +128,14 @@ counter of successful HTTP calls (calendar month, default quota 50) and return:
 `link_format`, `areas_resolve`, and `account_get` do not burn RentCast requests.
 Search tools attach the same `usage` snapshot on their responses.
 
+**Enforcement:** `getJSON` calls `UsageTracker.Gate` **before** HTTP.
+
+- Soft cap (default 40): billed tools return an error unless `confirm_spend=true`.
+  That flag is a per-call bump, not a lock-file reset — the last 10 each need it.
+- Hard cap (default 50): billed tools are blocked. The model cannot unlock this.
+  A human who upgraded RentCast sets `RENTCAST_ALLOW_OVERAGE=1` in MCP env.
+- `RENTCAST_USAGE_TRACK=0` disables the counter and both caps.
+
 ## Package layout
 
 ```text

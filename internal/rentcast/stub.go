@@ -12,7 +12,10 @@ func NewStub() *Stub {
 	return &Stub{Usage: NewUsageTrackerForTest("", defaultMonthlyQuota)}
 }
 
-func (s Stub) SearchListings(_ context.Context, req ListingsSearchRequest) (*ListingsSearchResult, error) {
+func (s Stub) SearchListings(ctx context.Context, req ListingsSearchRequest) (*ListingsSearchResult, error) {
+	if err := s.Usage.Gate(confirmSpendFromCtx(ctx)); err != nil {
+		return nil, err
+	}
 	intent, err := NormalizeIntent(req.Intent)
 	if err != nil {
 		return nil, err
@@ -42,7 +45,10 @@ func (s Stub) SearchListings(_ context.Context, req ListingsSearchRequest) (*Lis
 	}, nil
 }
 
-func (s Stub) GetListing(_ context.Context, id, intent string) (*ListingGetResult, error) {
+func (s Stub) GetListing(ctx context.Context, id, intent string) (*ListingGetResult, error) {
+	if err := s.Usage.Gate(confirmSpendFromCtx(ctx)); err != nil {
+		return nil, err
+	}
 	normalized, err := NormalizeIntent(intent)
 	if err != nil {
 		return nil, err
@@ -53,11 +59,17 @@ func (s Stub) GetListing(_ context.Context, id, intent string) (*ListingGetResul
 	}, nil
 }
 
-func (s Stub) RentEstimate(_ context.Context, req RentEstimateRequest) (*RentEstimateResult, error) {
+func (s Stub) RentEstimate(ctx context.Context, req RentEstimateRequest) (*RentEstimateResult, error) {
+	if err := s.Usage.Gate(confirmSpendFromCtx(ctx)); err != nil {
+		return nil, err
+	}
 	return &RentEstimateResult{Address: req.Address, Note: "stub client", Usage: s.Usage.Snapshot()}, nil
 }
 
-func (s Stub) MarketStats(_ context.Context, zipCode string) (*MarketStatsResult, error) {
+func (s Stub) MarketStats(ctx context.Context, zipCode string) (*MarketStatsResult, error) {
+	if err := s.Usage.Gate(confirmSpendFromCtx(ctx)); err != nil {
+		return nil, err
+	}
 	return &MarketStatsResult{ZipCode: zipCode, Note: "stub client", Usage: s.Usage.Snapshot()}, nil
 }
 

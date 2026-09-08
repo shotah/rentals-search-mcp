@@ -25,10 +25,12 @@ RENTCAST_API_KEY=...
 # Optional pin for Docker bake / native fetch:
 # RENTALS_SEARCH_MCP_VERSION=v0.0.1
 
-# Local usage counter (optional). In Docker, mount a volume or counts reset:
+# Local usage counter + caps (optional). In Docker, mount a volume or counts reset:
 # RENTCAST_USAGE_FILE=/data/rentcast-usage.json
 # RENTCAST_MONTHLY_QUOTA=50
-# RENTCAST_USAGE_TRACK=0
+# RENTCAST_SOFT_CAP=40
+# RENTCAST_ALLOW_OVERAGE=1
+# RENTCAST_USAGE_TRACK=0   # also disables soft/hard caps
 ```
 
 Docker/distroless: API key via env only. Local `usage` undercounts if the
@@ -59,6 +61,8 @@ host table with a `rentals` row when shipping the consumer PR.
 
 ## Cost reminder
 
-RentCast Developer ≈ **50 requests/month**. Prefer one tight `listings_search`
-over many exploratory pages. `areas_resolve`, `link_format`, and `account_get`
-are free (no RentCast call).
+RentCast Developer ≈ **50 requests/month**. Soft cap (40) requires
+`confirm_spend=true` on each remaining billed call; hard cap (50) cannot be
+unlocked by the model. Prefer one tight `listings_search` over many exploratory
+pages. `areas_resolve`, `link_format`, and `account_get` are free (no RentCast
+call).

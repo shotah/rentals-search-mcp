@@ -38,6 +38,7 @@ type listingsSearchInput struct {
 	Status        string  `json:"status,omitempty" jsonschema:"Active (default) or Inactive"`
 	Limit         int     `json:"limit,omitempty" jsonschema:"Page size (default 10, max 50)"`
 	Offset        int     `json:"offset,omitempty" jsonschema:"Pagination offset"`
+	ConfirmSpend  bool    `json:"confirm_spend,omitempty" jsonschema:"Required after the soft cap (usage.confirm_required). Re-call with confirm_spend=true to spend 1 remaining request. Cannot bypass the hard cap of 50."`
 }
 
 type areasResolveInput struct {
@@ -48,8 +49,9 @@ type areasResolveInput struct {
 }
 
 type listingsGetInput struct {
-	ListingID string `json:"listing_id" jsonschema:"RentCast listing id from listings_search"`
-	Intent    string `json:"intent" jsonschema:"REQUIRED. rent or buy — same intent used in listings_search. Sale and rental ids are different catalogs. Ask the human if unclear; do not guess."`
+	ListingID    string `json:"listing_id" jsonschema:"RentCast listing id from listings_search"`
+	Intent       string `json:"intent" jsonschema:"REQUIRED. rent or buy — same intent used in listings_search. Sale and rental ids are different catalogs. Ask the human if unclear; do not guess."`
+	ConfirmSpend bool   `json:"confirm_spend,omitempty" jsonschema:"Required after the soft cap (usage.confirm_required). Re-call with confirm_spend=true to spend 1 remaining request. Cannot bypass the hard cap of 50."`
 }
 
 type rentEstimateInput struct {
@@ -58,10 +60,12 @@ type rentEstimateInput struct {
 	Bedrooms      string `json:"bedrooms,omitempty" jsonschema:"Optional bedrooms (0=studio)"`
 	Bathrooms     string `json:"bathrooms,omitempty" jsonschema:"Optional bathrooms"`
 	SquareFootage string `json:"square_footage,omitempty" jsonschema:"Optional living area sqft"`
+	ConfirmSpend  bool   `json:"confirm_spend,omitempty" jsonschema:"Required after the soft cap (usage.confirm_required). Re-call with confirm_spend=true to spend 1 remaining request. Cannot bypass the hard cap of 50."`
 }
 
 type marketsGetInput struct {
-	ZipCode string `json:"zip_code" jsonschema:"5-digit US zip code"`
+	ZipCode      string `json:"zip_code" jsonschema:"5-digit US zip code"`
+	ConfirmSpend bool   `json:"confirm_spend,omitempty" jsonschema:"Required after the soft cap (usage.confirm_required). Re-call with confirm_spend=true to spend 1 remaining request. Cannot bypass the hard cap of 50."`
 }
 
 type linkFormatInput struct {
@@ -84,6 +88,7 @@ func (s *Server) listingsSearch(ctx context.Context, _ *sdkmcp.CallToolRequest, 
 	if s.Client == nil {
 		return errResult("client not configured"), nil, nil
 	}
+	ctx = rentcast.WithConfirmSpend(ctx, in.ConfirmSpend)
 	res, err := s.Client.SearchListings(ctx, rentcast.ListingsSearchRequest{
 		Intent:        in.Intent,
 		City:          in.City,
@@ -137,6 +142,7 @@ func (s *Server) listingsGet(ctx context.Context, _ *sdkmcp.CallToolRequest, in 
 	if s.Client == nil {
 		return errResult("client not configured"), nil, nil
 	}
+	ctx = rentcast.WithConfirmSpend(ctx, in.ConfirmSpend)
 	res, err := s.Client.GetListing(ctx, in.ListingID, in.Intent)
 	if err != nil {
 		return errResult(err.Error()), nil, nil
@@ -151,6 +157,7 @@ func (s *Server) rentEstimateGet(ctx context.Context, _ *sdkmcp.CallToolRequest,
 	if s.Client == nil {
 		return errResult("client not configured"), nil, nil
 	}
+	ctx = rentcast.WithConfirmSpend(ctx, in.ConfirmSpend)
 	res, err := s.Client.RentEstimate(ctx, rentcast.RentEstimateRequest{
 		Address:       in.Address,
 		PropertyType:  in.PropertyType,
@@ -171,6 +178,7 @@ func (s *Server) marketsGet(ctx context.Context, _ *sdkmcp.CallToolRequest, in m
 	if s.Client == nil {
 		return errResult("client not configured"), nil, nil
 	}
+	ctx = rentcast.WithConfirmSpend(ctx, in.ConfirmSpend)
 	res, err := s.Client.MarketStats(ctx, in.ZipCode)
 	if err != nil {
 		return errResult(err.Error()), nil, nil
@@ -239,7 +247,11 @@ func (s *Server) accountGet(_ context.Context, _ *sdkmcp.CallToolRequest, _ acco
 		"dashboard_url":  "https://app.rentcast.io/",
 		"free_tier_note": "Developer plan ≈ 50 API requests per calendar month (~1–2/day). Combine neighborhoods/zips into ONE listings_search.",
 		"quota_api":      false,
-		"note":           "Local counter resets on the 1st (see usage.period_resets). Treat requests_left as a hard budget. FREE: link_format, areas_resolve, account_get. Dashboard remains source of truth if billing cycle differs.",
+		"note": "Local counter resets on the 1st (see usage.period_resets). " +
+			"Soft cap (default 40): billed tools require confirm_spend=true. " +
+			"Hard cap (default 50): blocked — the model cannot unlock it; use link_format or wait for period_resets. " +
+			"A human who upgraded RentCast can set RENTCAST_ALLOW_OVERAGE=1. " +
+			"FREE: link_format, areas_resolve, account_get. Dashboard remains source of truth if billing cycle differs.",
 	}
 	if s.Client != nil {
 		if u := s.Client.AccountUsage(); u != nil {

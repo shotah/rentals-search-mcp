@@ -23,15 +23,23 @@ Every successful `listings_search`, `listings_get`, `rent_estimate_get`, and
 **Local usage counter** (on every search response + `account_get`):
 
 - `requests_used` / `requests_left` / `requests_per_month` (default 50)
+- `soft_cap` (default 40) / `cap_state` (`ok` | `confirm_required` | `exhausted`)
 - `period` = `YYYY-MM` (local calendar month)
 - `period_resets` = **1st of next month** (local time) — yes, the local counter
   resets on the first of the month
-- Not the official RentCast dashboard (billing cycle may differ) — still treat
-  `requests_left` as a hard budget before calling paid tools
+- Not the official RentCast dashboard (billing cycle may differ)
+
+**Caps (enforced before HTTP — not honor-system):**
+
+- **Soft (40 used):** billed tools error until you re-call with
+  `confirm_spend=true`. Required on **each** remaining call, not a one-time unlock.
+- **Hard (50 used):** billed tools error. Use `link_format` or wait for
+  `period_resets`. `confirm_spend` does **not** bypass this. Only a human setting
+  `RENTCAST_ALLOW_OVERAGE=1` in MCP env can continue (paid plan).
 
 **Before any burning call:** skim `usage` from the last response, or call
-`rentals__account_get` (free). If `requests_left` is low, prefer `link_format`
-or stop and tell the human.
+`rentals__account_get` (free). If `cap_state` is `confirm_required` or
+`exhausted`, prefer `link_format` or stop and tell the human.
 
 ## Thrifty search (one API call, not N)
 
@@ -114,8 +122,10 @@ Section:
 ```text
 ## Housing (apartments / houses — rent or buy)
 
-QUOTA: RentCast free ≈ 50 req/month (~1–2/day). Check rentals__account_get or
-usage on responses BEFORE searching. period_resets = 1st of next month (local counter).
+QUOTA: RentCast free ≈ 50 req/month (~1–2/day). HARD CAP at 50 — billed tools
+are blocked; the model cannot unlock them. After soft cap (~40) re-call with
+confirm_spend=true (each remaining call). Check rentals__account_get (cap_state)
+or usage on responses BEFORE searching. period_resets = 1st of next month.
 FREE: areas_resolve, link_format, account_get. EACH search/get/estimate/markets burns 1.
 
 When friends ask for apartments, houses, or condos:
@@ -132,7 +142,11 @@ When friends ask for apartments, houses, or condos:
 5. ALWAYS include each listing_url so the human can review — never apply,
    make offers, or message landlords/agents
 
-If requests_left is low → rentals__link_format (FREE, still needs intent) or stop.
+If cap_state is confirm_required → re-call with confirm_spend=true only if this
+search is worth 1 remaining request; else rentals__link_format (FREE, still needs
+intent) or stop.
+If cap_state is exhausted → do NOT retry billed tools. link_format or wait until
+period_resets. The model cannot unlock the hard cap.
 Do NOT use rentals for retail/office/commercial. Needs RENTCAST_API_KEY.
 ```
 

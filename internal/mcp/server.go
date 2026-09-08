@@ -65,7 +65,8 @@ func (s *Server) newMCPServer() *sdkmcp.Server {
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "listings_search",
-		Description: "Search US residential listings to rent OR buy (burns 1 RentCast request). Free tier ≈50/month — use sparingly. " +
+		Description: "Search US residential listings to rent OR buy (burns 1 RentCast request). " +
+			"HARD CAP 50/month — blocked with no model bypass. After the soft cap (~40) re-call with confirm_spend=true. " +
 			"REQUIRED intent=rent or intent=buy. If the human has not said rent vs buy, ASK first — do not guess. " +
 			"THRIFTY: pass multiple neighborhoods as comma-separated neighborhood=Ballard,Fremont OR zip_codes=98107,98103 " +
 			"AND/OR property_type=house,condo for ONE call — never one search per area or type. " +
@@ -77,6 +78,7 @@ func (s *Server) newMCPServer() *sdkmcp.Server {
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "listings_get",
 		Description: "Get one listing by id (burns 1 RentCast request). Only after the human picks a candidate from search. " +
+			"HARD CAP 50/month; after soft cap use confirm_spend=true. " +
 			"REQUIRED intent=rent or intent=buy (same catalog as listings_search — sale and rental ids differ). " +
 			"Do not prefetch many ids. Does not apply, make offers, or contact landlords/agents.",
 	}, s.listingsGet)
@@ -84,13 +86,13 @@ func (s *Server) newMCPServer() *sdkmcp.Server {
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "rent_estimate_get",
 		Description: "Fair-rent AVM for one address (burns 1 RentCast request). Use sparingly when asking if a listed rent is reasonable. " +
-			"Not for commercial spaces.",
+			"HARD CAP 50/month; after soft cap use confirm_spend=true. Not for commercial spaces.",
 	}, s.rentEstimateGet)
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "markets_get",
 		Description: "Zip rental market aggregates (burns 1 RentCast request). Optional context — skip if quota is tight; " +
-			"prefer a tight listings_search instead.",
+			"prefer a tight listings_search instead. HARD CAP 50/month; after soft cap use confirm_spend=true.",
 	}, s.marketsGet)
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
@@ -102,13 +104,14 @@ func (s *Server) newMCPServer() *sdkmcp.Server {
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "link_format",
 		Description: "FREE public search URL fallback (no RentCast call). REQUIRED intent=rent or intent=buy. " +
-			"Ask the human if rent vs buy is unclear. Prefer when usage.requests_left is low.",
+			"Ask the human if rent vs buy is unclear. Prefer when usage.cap_state is confirm_required or exhausted.",
 	}, s.linkFormat)
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "account_get",
-		Description: "FREE local usage counter (requests_used / requests_left / period_resets on the 1st). " +
-			"Check before burning RentCast calls. Free tier ≈50/month (~1–2/day). Does not call the network.",
+		Description: "FREE local usage counter (requests_used / requests_left / cap_state / period_resets on the 1st). " +
+			"Check before burning RentCast calls. Soft cap needs confirm_spend; hard cap (50) cannot be unlocked by the model. " +
+			"Does not call the network.",
 	}, s.accountGet)
 
 	return server

@@ -54,7 +54,7 @@ see [docs/commercial-spaces.md](docs/commercial-spaces.md).
 | `markets_get` | Aggregate rent / listing stats for a US zip code |
 | `areas_resolve` | Local neighborhood → zips / lat/lng (Seattle presets; no API) |
 | `link_format` | Fallback public search URL (no API call) |
-| `account_get` | Local usage counter (used/left) + dashboard link — RentCast has no public quota API |
+| `account_get` | Local usage counter (used/left/cap_state) + dashboard link — RentCast has no public quota API |
 
 Host names: `rentals__listings_search`, `rentals__listings_get`,
 `rentals__rent_estimate_get`, `rentals__markets_get`, `rentals__areas_resolve`,
@@ -95,7 +95,25 @@ ASK rent vs buy → [areas_resolve] → listings_search(intent=…) → [listing
 export RENTCAST_API_KEY=...
 # optional (tests / proxies):
 # export RENTCAST_BASE_URL=https://api.rentcast.io/v1
+# optional caps (defaults shown):
+# export RENTCAST_MONTHLY_QUOTA=50
+# export RENTCAST_SOFT_CAP=40
+# export RENTCAST_ALLOW_OVERAGE=1   # human-only; paid plan / intentional overage
 ```
+
+Billed tools (`listings_search`, `listings_get`, `rent_estimate_get`,
+`markets_get`) are **gated before any HTTP**:
+
+| Cap | Default | What happens | Who can continue |
+| --- | --- | --- | --- |
+| Soft | 40 used | Error: re-call the **same** tool with `confirm_spend=true` | The model (explicit bump on each remaining call) |
+| Hard | 50 used | Error: do not retry; use `link_format` or wait for `period_resets` | A **human** setting `RENTCAST_ALLOW_OVERAGE=1` in MCP env — not a tool |
+
+A lock file the model can reset would not protect the free tier: if the model
+can clear it, it will, and you still go over 50. The hard cap lives in the
+HTTP client and cannot be unlocked from a tool.
+
+`RENTCAST_USAGE_TRACK=0` disables the counter **and** both caps.
 
 ### Docker / containers
 
@@ -104,11 +122,12 @@ The binary is static (`CGO_ENABLED=0`) and fine in distroless — pass
 
 **Local usage counter caveat:** `account_get` / search `usage` persist under
 `RENTCAST_USAGE_FILE` (default: OS user config dir). In Docker that path is
-usually **ephemeral** (or unwritable in distroless), so counts reset on
-recreate and can **undercount** real RentCast spend. Mitigations:
+usually **ephemeral** (or unwritable in distroless), so counts (and therefore
+caps) reset on recreate and can **undercount** real RentCast spend. Mitigations:
 
 - Mount a volume and set `RENTCAST_USAGE_FILE=/data/rentcast-usage.json`, or
 - Treat the dashboard as source of truth and/or set `RENTCAST_USAGE_TRACK=0`
+  (that also turns **off** the soft/hard caps)
 
 Multiple containers without a shared usage file each keep their own counter.
 

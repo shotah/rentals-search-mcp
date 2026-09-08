@@ -2,10 +2,12 @@ package rentcast
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -528,6 +530,61 @@ func TestSummarizeEmpty(t *testing.T) {
 	s := summarizeListings(nil, 0, 10, 0, IntentRent)
 	if !strings.Contains(s, "No listings") {
 		t.Fatalf("%q", s)
+	}
+}
+
+func TestMarketStatsHardCapDoesNotHitNetwork(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		http.Error(w, "should not be called", http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+
+	usage := NewUsageTrackerForTest(filepath.Join(t.TempDir(), "usage.json"), 50)
+	for range 50 {
+		usage.RecordSuccess()
+	}
+	c := &Client{APIKey: "k", BaseURL: srv.URL, HTTPClient: srv.Client(), Usage: usage}
+	_, err := c.MarketStats(t.Context(), "98101")
+	if !errors.Is(err, ErrQuotaExhausted) {
+		t.Fatalf("err=%v", err)
+	}
+	if hits.Load() != 0 {
+		t.Fatalf("hard cap leaked %d HTTP calls", hits.Load())
+	}
+}
+
+func TestMarketStatsSoftCapRequiresConfirm(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		_ = json.NewEncoder(w).Encode(map[string]any{"zipCode": "98101"})
+	}))
+	t.Cleanup(srv.Close)
+
+	usage := NewUsageTrackerForTest(filepath.Join(t.TempDir(), "usage.json"), 50)
+	for range 40 {
+		usage.RecordSuccess()
+	}
+	c := &Client{APIKey: "k", BaseURL: srv.URL, HTTPClient: srv.Client(), Usage: usage}
+	_, err := c.MarketStats(t.Context(), "98101")
+	if !errors.Is(err, ErrQuotaConfirmNeeded) {
+		t.Fatalf("err=%v", err)
+	}
+	if hits.Load() != 0 {
+		t.Fatalf("soft cap leaked %d HTTP calls", hits.Load())
+	}
+
+	_, err = c.MarketStats(WithConfirmSpend(t.Context(), true), "98101")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("confirm should send exactly 1 request, got %d", hits.Load())
+	}
+	if usage.Snapshot().RequestsUsed != 41 {
+		t.Fatalf("usage %+v", usage.Snapshot())
 	}
 }
 

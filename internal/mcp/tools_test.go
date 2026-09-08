@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/shotah/rentals-search-mcp/internal/rentcast"
 )
 
@@ -153,9 +155,79 @@ func TestAccountGet(t *testing.T) {
 		t.Fatalf("unexpected out: %#v", out)
 	}
 	u, ok := m["usage"].(*rentcast.Usage)
-	if !ok || u == nil || u.RequestsPerMonth != 50 {
+	if !ok || u == nil || u.RequestsPerMonth != 50 || u.SoftCap != 40 || u.CapState != "ok" {
 		t.Fatalf("usage %#v", m["usage"])
 	}
+	note, _ := m["note"].(string)
+	if !strings.Contains(note, "confirm_spend") || !strings.Contains(note, "Hard cap") {
+		t.Fatalf("note %q", note)
+	}
+}
+
+func TestListingsSearchSoftCapRequiresConfirm(t *testing.T) {
+	stub := rentcast.NewStub()
+	for range 40 {
+		stub.Usage.RecordSuccess()
+	}
+	s := New(stub)
+	res, _, err := s.listingsSearch(t.Context(), nil, listingsSearchInput{
+		Intent: "rent", City: "Seattle", State: "WA",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res == nil || !res.IsError {
+		t.Fatal("expected soft-cap error")
+	}
+	text := toolErrorText(res)
+	if !strings.Contains(text, "confirm_spend=true") {
+		t.Fatalf("error %q", text)
+	}
+
+	res, out, err := s.listingsSearch(t.Context(), nil, listingsSearchInput{
+		Intent: "rent", City: "Seattle", State: "WA", ConfirmSpend: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res != nil && res.IsError {
+		t.Fatalf("confirm should pass: %+v", res)
+	}
+	if out == nil {
+		t.Fatal("nil out")
+	}
+}
+
+func TestListingsSearchHardCapCannotBypass(t *testing.T) {
+	stub := rentcast.NewStub()
+	for range 50 {
+		stub.Usage.RecordSuccess()
+	}
+	s := New(stub)
+	res, _, err := s.listingsSearch(t.Context(), nil, listingsSearchInput{
+		Intent: "rent", City: "Seattle", State: "WA", ConfirmSpend: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res == nil || !res.IsError {
+		t.Fatal("expected hard-cap error")
+	}
+	text := toolErrorText(res)
+	if !strings.Contains(text, "HARD CAP") || !strings.Contains(text, "RENTCAST_ALLOW_OVERAGE=1") {
+		t.Fatalf("error %q", text)
+	}
+}
+
+func toolErrorText(res *sdkmcp.CallToolResult) string {
+	if res == nil || len(res.Content) == 0 {
+		return ""
+	}
+	tc, ok := res.Content[0].(*sdkmcp.TextContent)
+	if !ok || tc == nil {
+		return ""
+	}
+	return tc.Text
 }
 
 func TestLinkFormat(t *testing.T) {

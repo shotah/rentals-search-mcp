@@ -482,6 +482,9 @@ func (c *Client) getJSON(ctx context.Context, path string, params url.Values, de
 	if strings.TrimSpace(c.APIKey) == "" {
 		return nil, errors.New("RENTCAST_API_KEY is required")
 	}
+	if err := c.Usage.Gate(confirmSpendFromCtx(ctx)); err != nil {
+		return nil, err
+	}
 	base := c.BaseURL
 	if base == "" {
 		base = defaultBaseURL
