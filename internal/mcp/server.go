@@ -65,22 +65,21 @@ func (s *Server) newMCPServer() *sdkmcp.Server {
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "listings_search",
-		Description: "Search US residential listings to rent OR buy (burns 1 RentCast request). " +
-			"HARD CAP 50/month — blocked with no model bypass. After the soft cap (~40) re-call with confirm_spend=true. " +
-			"REQUIRED intent=rent or intent=buy. If the human has not said rent vs buy, ASK first — do not guess. " +
+		Description: "Search US long-term FOR-RENT residential listings (default). Burns 1 RentCast request to GET /listings/rental/long-term. " +
+			"Pass intent=buy only for homes for sale. HARD CAP 50/month — blocked with no model bypass. After the soft cap (~40) re-call with confirm_spend=true. " +
 			"THRIFTY: pass multiple neighborhoods as comma-separated neighborhood=Ballard,Fremont OR zip_codes=98107,98103 " +
 			"AND/OR property_type=house,condo for ONE call — never one search per area or type. " +
 			"Filter tightly (bedrooms, price_max, new_this_week). Soft pets/parking/laundry prefs are not API filters. " +
-			"Returns listing_url / contact handoff — ALWAYS show each listing_url so the human can review. " +
+			"Handoff is agent/office phone and email (who is marketing the rental). RentCast has no Zillow listing URL. " +
 			"Does not apply, make offers, or contact landlords/agents.",
 	}, s.listingsSearch)
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "listings_get",
-		Description: "Get one listing by id (burns 1 RentCast request). Only after the human picks a candidate from search. " +
-			"HARD CAP 50/month; after soft cap use confirm_spend=true. " +
-			"REQUIRED intent=rent or intent=buy (same catalog as listings_search — sale and rental ids differ). " +
-			"Do not prefetch many ids. Does not apply, make offers, or contact landlords/agents.",
+		Description: "Get one FOR-RENT listing by id (default catalog /listings/rental/long-term/{id}; burns 1 RentCast request). " +
+			"Only after the human picks a candidate from search. HARD CAP 50/month; after soft cap use confirm_spend=true. " +
+			"Pass intent=buy only if the id came from a buy search. " +
+			"Present agent/office phone and email. Does not apply, make offers, or contact landlords/agents.",
 	}, s.listingsGet)
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
@@ -103,8 +102,8 @@ func (s *Server) newMCPServer() *sdkmcp.Server {
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name: "link_format",
-		Description: "FREE public search URL fallback (no RentCast call). REQUIRED intent=rent or intent=buy. " +
-			"Ask the human if rent vs buy is unclear. Prefer when usage.cap_state is confirm_required or exhausted.",
+		Description: "FREE public search URL fallback (no RentCast call). Defaults to Zillow for_rent. " +
+			"Pass intent=buy only for for_sale. Prefer when usage.cap_state is confirm_required or exhausted.",
 	}, s.linkFormat)
 
 	sdkmcp.AddTool(server, &sdkmcp.Tool{

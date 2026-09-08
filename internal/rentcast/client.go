@@ -287,20 +287,18 @@ func normalizeOnePropertyType(raw string) string {
 }
 
 // NormalizeIntent maps agent aliases to IntentRent or IntentBuy.
-// Empty or unknown values error so the agent must ask the human.
+// Empty defaults to rent (this MCP's for-rent catalog). Unknown values error.
 func NormalizeIntent(raw string) (string, error) {
 	s := strings.ToLower(strings.TrimSpace(raw))
 	s = strings.ReplaceAll(s, "-", "_")
 	s = strings.ReplaceAll(s, " ", "_")
 	switch s {
-	case IntentRent, "rental", "rentals", "lease", "leasing", "for_rent", "forrent":
+	case "", IntentRent, "rental", "rentals", "lease", "leasing", "for_rent", "forrent":
 		return IntentRent, nil
 	case IntentBuy, "sale", "sales", "purchase", "purchasing", "buying", "for_sale", "forsale":
 		return IntentBuy, nil
-	case "":
-		return "", errors.New("intent is required (rent or buy). Ask the human whether they want to rent or buy — do not guess")
 	default:
-		return "", fmt.Errorf("intent must be rent or buy (got %q). Ask the human if unclear — do not guess", raw)
+		return "", fmt.Errorf("intent must be rent or buy (got %q). Default is rent (long-term for-rent). Pass buy only for homes for sale", raw)
 	}
 }
 
@@ -319,17 +317,23 @@ func listingGetPath(id, intent string) string {
 }
 
 func searchHandoffNote(intent string) string {
-	action := "Do not apply or message landlords."
+	action := "Do not apply or message landlords/agents on the human's behalf."
 	if intent == IntentBuy {
 		action = "Do not make offers or contact listing agents on the human's behalf."
 	}
-	return "ALWAYS present each listing_url to the human so they can review. " + action +
-		" listing_url is agent/office website when present, else a Google search for the address (RentCast has no Zillow/Realtor deep-link ids)."
+	return "RentCast has no Zillow/Apartments.com/Realtor listing URL. " +
+		"ALWAYS present agent/office phone, email, and name — that is who is marketing this property. " +
+		"agent.website / office.website are broker pages when present, not a unit listing. " +
+		"search_url is a Google address fallback. " + action
 }
 
 func validateSearchRequest(req ListingsSearchRequest) error {
-	if _, err := NormalizeIntent(req.Intent); err != nil {
+	intent, err := NormalizeIntent(req.Intent)
+	if err != nil {
 		return err
+	}
+	if intent == IntentRent && propertyTypeIncludesLand(req.PropertyType) {
+		return errors.New("property_type=land is sale-only; for-rent search uses /listings/rental/long-term and cannot include land")
 	}
 	hasZip := strings.TrimSpace(req.ZipCode) != "" || len(req.ZipFilter) > 0
 	hasCityState := strings.TrimSpace(req.City) != "" && strings.TrimSpace(req.State) != ""
@@ -562,11 +566,16 @@ type rawListing struct {
 	ListedDate       string      `json:"listedDate"`
 	Latitude         float64     `json:"latitude"`
 	Longitude        float64     `json:"longitude"`
+	ListingType      string      `json:"listingType"`
+	MLSName          string      `json:"mlsName"`
+	MLSNumber        string      `json:"mlsNumber"`
 	ListingAgent     *rawContact `json:"listingAgent"`
 	ListingOffice    *rawContact `json:"listingOffice"`
 }
 
 func (r rawListing) toListing(intent string) Listing {
+	agent := contactFromRaw(r.ListingAgent)
+	office := contactFromRaw(r.ListingOffice)
 	out := Listing{
 		ID:               r.ID,
 		Intent:           intent,
@@ -575,6 +584,7 @@ func (r rawListing) toListing(intent string) Listing {
 		State:            r.State,
 		ZipCode:          r.ZipCode,
 		PropertyType:     r.PropertyType,
+		ListingType:      strings.TrimSpace(r.ListingType),
 		Bedrooms:         r.Bedrooms,
 		Bathrooms:        r.Bathrooms,
 		SquareFootage:    r.SquareFootage,
@@ -582,12 +592,14 @@ func (r rawListing) toListing(intent string) Listing {
 		Status:           r.Status,
 		DaysOnMarket:     r.DaysOnMarket,
 		ListedDate:       r.ListedDate,
+		MLSName:          strings.TrimSpace(r.MLSName),
+		MLSNumber:        strings.TrimSpace(r.MLSNumber),
 		Latitude:         r.Latitude,
 		Longitude:        r.Longitude,
-		Agent:            contactFromRaw(r.ListingAgent),
-		Office:           contactFromRaw(r.ListingOffice),
+		Agent:            agent,
+		Office:           office,
 	}
-	out.ListingURL = listingHandoffURL(out)
+	out.SearchURL = googleListingSearchURL(listingAddress(out), intent)
 	return out
 }
 
@@ -607,19 +619,17 @@ func contactFromRaw(c *rawContact) *ListingContact {
 	return out
 }
 
-// listingHandoffURL prefers agent/office website; otherwise a Google address search.
-//
-// RentCast does not return Zillow ZPIDs or Realtor.com M-ids, so we cannot build
-// stable deep links like realtor.com/rentals/details/…_M…. Google search for
-// "{address} rental" or "{address} for sale" reliably surfaces the live listing.
-func listingHandoffURL(l Listing) string {
-	if l.Agent != nil && l.Agent.Website != "" {
-		return l.Agent.Website
+func propertyTypeIncludesLand(raw string) bool {
+	n := NormalizePropertyType(raw)
+	if n == "" {
+		return false
 	}
-	if l.Office != nil && l.Office.Website != "" {
-		return l.Office.Website
+	for p := range strings.SplitSeq(n, "|") {
+		if strings.EqualFold(strings.TrimSpace(p), "Land") {
+			return true
+		}
 	}
-	return googleListingSearchURL(listingAddress(l), l.Intent)
+	return false
 }
 
 func listingAddress(l Listing) string {
@@ -725,9 +735,9 @@ func summarizeListings(listings []Listing, total, limit, offset int, intent stri
 	if newThisWeek > 0 {
 		freshNote = fmt.Sprintf(" %d listing(s) look new this week (≤7 days on market).", newThisWeek)
 	}
-	handoff := " ALWAYS include each listing_url so the human can review — do not apply for them."
+	handoff := " ALWAYS present agent/office phone and email. search_url is a Google fallback — RentCast has no portal listing URL. Do not apply for them."
 	if intent == IntentBuy {
-		handoff = " ALWAYS include each listing_url so the human can review — do not make offers for them."
+		handoff = " ALWAYS present agent/office phone and email. search_url is a Google fallback. Do not make offers for them."
 	}
 	_ = limit
 	return pageNote + ". Top picks (freshest / value): " + strings.Join(parts, "; ") + "." +

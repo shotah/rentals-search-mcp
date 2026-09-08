@@ -10,8 +10,6 @@
 - [x] Coverage ≥70% on client + tools (local + CI gate)
 - [x] CI / GoReleaser / README badges / `make release` scaffolding
 - [x] Pre-commit hook script (`scripts/pre-commit` → `make install-hooks`)
-- [ ] Personal GitHub repo (manual — **never** work org)
-- [ ] `git init` + `make install-hooks` + push (personal remote)
 - [x] Agent docs / TOOLS.md sketch in-repo ([docs/agent.md](docs/agent.md))
 - [ ] ai-gantry `mcp.toml` + `local-agent/docs/rentals.md` consumer PR
 
@@ -43,7 +41,7 @@ Checklist:
 - [x] Snake_case MCP args → RentCast query params
 - [x] Self-test covers schema + dry client path
 
-**Handoff path:** present `listing_url` / contact fields from the listing record.
+**Handoff path:** present `agent` / `office` contact fields from the listing record.
 We do not apply, message landlords, or schedule tours.
 
 ---

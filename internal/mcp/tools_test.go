@@ -278,25 +278,37 @@ func TestLinkFormatBuy(t *testing.T) {
 	}
 }
 
-func TestLinkFormatRequiresIntent(t *testing.T) {
+func TestLinkFormatDefaultsIntentRent(t *testing.T) {
 	s := New(nil)
-	res, _, err := s.linkFormat(t.Context(), nil, linkFormatInput{City: "Seattle", State: "WA"})
+	res, out, err := s.linkFormat(t.Context(), nil, linkFormatInput{City: "Seattle", State: "WA"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res == nil || !res.IsError {
-		t.Fatal("expected intent error")
+	if res != nil && res.IsError {
+		t.Fatalf("%+v", res)
+	}
+	m, ok := out.(map[string]any)
+	if !ok {
+		t.Fatalf("out type %T", out)
+	}
+	u, _ := m["search_url"].(string)
+	if m["intent"] != "rent" || !strings.Contains(u, "for_rent") {
+		t.Fatalf("%#v", out)
 	}
 }
 
-func TestListingsSearchRequiresIntent(t *testing.T) {
+func TestListingsSearchDefaultsIntentRent(t *testing.T) {
 	s := New(rentcast.NewStub())
-	res, _, err := s.listingsSearch(t.Context(), nil, listingsSearchInput{City: "Austin", State: "TX"})
+	res, out, err := s.listingsSearch(t.Context(), nil, listingsSearchInput{City: "Austin", State: "TX"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res == nil || !res.IsError {
-		t.Fatal("expected intent error")
+	if res != nil && res.IsError {
+		t.Fatalf("%+v", res)
+	}
+	got, ok := out.(*rentcast.ListingsSearchResult)
+	if !ok || got == nil || got.Intent != "rent" {
+		t.Fatalf("%#v", out)
 	}
 }
 
@@ -317,14 +329,18 @@ func TestListingsSearchBuyStub(t *testing.T) {
 	}
 }
 
-func TestListingsGetRequiresIntent(t *testing.T) {
+func TestListingsGetDefaultsIntentRent(t *testing.T) {
 	s := New(rentcast.NewStub())
-	res, _, err := s.listingsGet(t.Context(), nil, listingsGetInput{ListingID: "abc"})
+	res, out, err := s.listingsGet(t.Context(), nil, listingsGetInput{ListingID: "abc"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res == nil || !res.IsError {
-		t.Fatal("expected intent error")
+	if res != nil && res.IsError {
+		t.Fatalf("%+v", res)
+	}
+	got, ok := out.(*rentcast.ListingGetResult)
+	if !ok || got == nil || got.Intent != "rent" {
+		t.Fatalf("%#v", out)
 	}
 }
 

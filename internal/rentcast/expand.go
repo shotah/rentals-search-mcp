@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-const amenityUnsupportedNote = "RentCast listings API does not expose pet/parking/laundry filters — verify on listing_url or with the listing agent/office."
+const amenityUnsupportedNote = "RentCast listings API does not expose pet/parking/laundry filters — verify with the listing agent/office."
 
 // ExpandSearchRequest applies neighborhood presets, multi-zip parsing, and
 // new-this-week / days-old helpers before the HTTP call.

@@ -8,7 +8,7 @@ const (
 
 // ListingsSearchRequest is the MCP-facing search input (mapped to RentCast query params).
 type ListingsSearchRequest struct {
-	Intent        string // required: rent | buy (aliases normalized)
+	Intent        string // empty defaults to rent; buy selects /listings/sale
 	City          string
 	State         string
 	ZipCode       string
@@ -49,12 +49,13 @@ type ListingContact struct {
 // Listing is a lean listing summary for agents.
 type Listing struct {
 	ID               string          `json:"id"`
-	Intent           string          `json:"intent,omitempty"` // rent | buy
+	Intent           string          `json:"intent,omitempty"` // rent → /listings/rental/long-term; buy → /listings/sale
 	FormattedAddress string          `json:"formatted_address,omitempty"`
 	City             string          `json:"city,omitempty"`
 	State            string          `json:"state,omitempty"`
 	ZipCode          string          `json:"zip_code,omitempty"`
 	PropertyType     string          `json:"property_type,omitempty"`
+	ListingType      string          `json:"listing_type,omitempty"`
 	Bedrooms         float64         `json:"bedrooms"`
 	Bathrooms        float64         `json:"bathrooms"`
 	SquareFootage    float64         `json:"square_footage,omitempty"`
@@ -62,7 +63,9 @@ type Listing struct {
 	Status           string          `json:"status,omitempty"`
 	DaysOnMarket     int             `json:"days_on_market,omitempty"`
 	ListedDate       string          `json:"listed_date,omitempty"`
-	ListingURL       string          `json:"listing_url,omitempty"`
+	MLSName          string          `json:"mls_name,omitempty"`
+	MLSNumber        string          `json:"mls_number,omitempty"`
+	SearchURL        string          `json:"search_url,omitempty"` // Google address fallback; RentCast has no portal listing URL
 	Latitude         float64         `json:"latitude,omitempty"`
 	Longitude        float64         `json:"longitude,omitempty"`
 	Agent            *ListingContact `json:"agent,omitempty"`

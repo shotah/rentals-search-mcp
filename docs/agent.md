@@ -82,31 +82,29 @@ Avoid: paging with `offset` unless the human asks for more; avoid
 ## Contract
 
 ```text
-ASK rent vs buy → [account_get?] → [areas_resolve FREE] → ONE listings_search(intent=…) → [listings_get] → handoff
+ASK if they want to buy → [account_get?] → [areas_resolve FREE] → ONE listings_search (defaults to rent) → [listings_get] → handoff
                                                               ↘ markets / rent_estimate only if needed
 ```
 
-1. **Rent or buy** — if the human has not said which, **ask before searching**.
-   Then pass `intent=rent` or `intent=buy` on `listings_search`, `listings_get`,
-   and `link_format`. Do not guess. Sale and rental listing ids are different
-   catalogs. `price_min` / `price_max` = monthly rent when renting, purchase
-   price when buying.
+1. **For-rent by default** — `listings_search` / `listings_get` / `link_format`
+   use the long-term rental catalog unless you pass `intent=buy`.
+   Sale and rental listing ids are different catalogs. `price_min` / `price_max`
+   = monthly rent when renting, purchase price when buying.
 2. **Budget check** — notice `usage` / `account_get` (free).
 3. **Where + budget** — one `listings_search` with city+state, `zip_codes`, or
    `neighborhood` (comma-separated OK), plus beds / price / type.
 4. **Fresh** — `new_this_week` or `days_old_max` when they want recent listings.
 5. **Detail** — `listings_get` only after the human picks an id (same `intent`).
-6. **Handoff** — ALWAYS include `listing_url` for every listing you mention so
-   the human can review. Never apply, make offers, or message landlords/agents.
-   `listing_url` is agent/office site when present, else Google `{address} rental`
-   or `{address} for sale` (no Zillow/Realtor deep-link ids from RentCast).
+6. **Handoff** — ALWAYS present `agent` / `office` (name, phone, email, website).
+   RentCast has no Zillow/Realtor listing URL. `search_url` is a Google address
+   fallback. Never apply, make offers, or message landlords/agents for them.
 
 ## Hard rules
 
 - Residential long-term only — **not** retail / office / commercial.
-- ALWAYS give the human each `listing_url` (they review; you do not apply or offer).
+- ALWAYS give the human agent/office contact (they review; you do not apply or offer).
 - Soft prefs `pets_wanted` / `parking_wanted` / `laundry_wanted` are **not**
-  RentCast filters — confirm on the listing page.
+  RentCast filters — confirm with the listing agent/office.
 - Be thrifty: **one combined search > many area or type searches**.
 
 ## TOOLS.md sketch (paste into persona)
@@ -129,18 +127,19 @@ or usage on responses BEFORE searching. period_resets = 1st of next month.
 FREE: areas_resolve, link_format, account_get. EACH search/get/estimate/markets burns 1.
 
 When friends ask for apartments, houses, or condos:
-0. If they have not said rent vs buy, ASK. Then pass intent=rent or intent=buy
-   on every listings_search / listings_get / link_format. Do NOT guess or default.
+0. Default is for-rent (GET /listings/rental/long-term). Pass intent=buy only
+   for homes for sale. Do NOT guess buy.
 1. Optional rentals__account_get if usage unknown
 2. Optional rentals__areas_resolve (FREE) for Seattle neighborhood names
 3. ONE rentals__listings_search — combine areas AND types:
-   intent=rent|buy + neighborhood="Ballard,Fremont" OR zip_codes="98107,98103"
+   neighborhood="Ballard,Fremont" OR zip_codes="98107,98103"
    + property_type="house,condo" + bedrooms + price_max (+ new_this_week).
    price_max is monthly rent when renting, purchase price when buying.
    NEVER one call per neighborhood or property type.
 4. rentals__listings_get only for a chosen id (same intent)
-5. ALWAYS include each listing_url so the human can review — never apply,
-   make offers, or message landlords/agents
+5. ALWAYS present agent/office name, phone, email — RentCast has no portal
+   listing URL. search_url is a Google fallback. Never apply, make offers,
+   or message landlords/agents
 
 If cap_state is confirm_required → re-call with confirm_spend=true only if this
 search is worth 1 remaining request; else rentals__link_format (FREE, still needs

@@ -56,7 +56,7 @@ Agent-facing args (snake_case):
 
 | Arg | RentCast | Notes |
 | --- | --- | --- |
-| `intent` | (path) | **Required** `rent` or `buy`. If the human has not said which, the agent must ask — do not guess or default. |
+| `intent` | (path) | Defaults to **rent** → `GET /listings/rental/long-term`. Pass `buy` for `GET /listings/sale`. |
 | `city` / `state` | `city` / `state` | Case-sensitive on their side — normalize carefully |
 | `zip_code` | `zipCode` | Prefer when human gives a zip |
 | `zip_codes` | (client filter) | CSV/pipe multi-zip; one API call + filter when city/state set |
@@ -92,7 +92,7 @@ Property-type aliases (MCP → RentCast):
 Response shape (lean):
 
 - `listings[]` — id, `intent`, address, price, beds/baths, sqft, property_type, status,
-  days-ish fields if present, `listing_url`, contact snippet
+  days-ish fields, `mls_name` / `mls_number`, `agent` / `office`, `search_url` (Google fallback)
 - `summary` — short recommendation blurb for the agent
 - `count` / pagination hints
 - `query` echo (debuggable)

@@ -48,7 +48,7 @@ see [docs/commercial-spaces.md](docs/commercial-spaces.md).
 
 | Tool | Description |
 | --- | --- |
-| `listings_search` | **Required `intent=rent\|buy`** + city/zip/neighborhood/radius + beds/baths/price/type + `new_this_week` / `days_old_max` |
+| `listings_search` | **For-rent by default** (`/listings/rental/long-term`); pass `intent=buy` only for sale. City/zip/neighborhood + beds/price/type |
 | `listings_get` | One listing by RentCast listing id (**same `intent`** — sale and rental catalogs differ) |
 | `rent_estimate_get` | Long-term rent AVM for an address (+ comps when available) |
 | `markets_get` | Aggregate rent / listing stats for a US zip code |
@@ -63,14 +63,14 @@ Host names: `rentals__listings_search`, `rentals__listings_get`,
 ### Agent contract
 
 ```text
-ASK rent vs buy → [areas_resolve] → listings_search(intent=…) → [listings_get] → handoff
+ASK if they want to buy → [areas_resolve] → listings_search (defaults to rent) → [listings_get] → handoff
                                               ↘ markets_get / rent_estimate_get (rent context)
 ```
 
-1. **Rent or buy:** if the human has not said which, **ask**. Then pass
-   `intent=rent` or `intent=buy` on every `listings_search` / `listings_get` /
-   `link_format`. Do not guess. `price_min` / `price_max` are monthly rent when
-   renting and purchase price when buying.
+1. **For-rent by default:** `listings_search` / `listings_get` / `link_format`
+   hit the long-term rental catalog unless you pass `intent=buy`.
+   `price_min` / `price_max` are monthly rent when renting and purchase price
+   when buying.
 2. **Where + budget:** `listings_search` with `city`+`state`, `zip_code` /
    `zip_codes`, or `neighborhood` (e.g. `Capitol Hill`), plus beds/price/type.
    Use `new_this_week` or `days_old_max` for fresh listings.
@@ -79,11 +79,12 @@ ASK rent vs buy → [areas_resolve] → listings_search(intent=…) → [listing
 4. **Detail:** `listings_get` when the human picks a candidate id (same `intent`).
 5. **Context (optional):** `markets_get` for zip **rental** averages;
    `rent_estimate_get` when comparing a specific address to “fair rent”.
-6. **Handoff:** give the human the listing URL / contact fields. Do **not**
-   impersonate the renter or buyer, apply, or make offers.
+6. **Handoff:** give the human `agent` / `office` (name, phone, email, website).
+   RentCast has no portal listing URL; `search_url` is a Google address fallback.
+   Do **not** impersonate the renter or buyer, apply, or make offers.
 
 `pets_wanted` / `parking_wanted` / `laundry_wanted` are **soft preferences only**
-— RentCast does not expose those filters; confirm on `listing_url`.
+— RentCast does not expose those filters; confirm with the listing agent/office.
 
 ## Setup
 

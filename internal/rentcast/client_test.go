@@ -31,8 +31,11 @@ func TestNormalizeIntent(t *testing.T) {
 			t.Fatalf("NormalizeIntent(%q)=%q want %q", in, got, want)
 		}
 	}
-	if _, err := NormalizeIntent(""); err == nil {
-		t.Fatal("expected empty intent error")
+	if _, err := NormalizeIntent(""); err != nil {
+		t.Fatalf("empty intent should default to rent: %v", err)
+	}
+	if got, _ := NormalizeIntent(""); got != IntentRent {
+		t.Fatalf("empty intent=%q want rent", got)
 	}
 	if _, err := NormalizeIntent("maybe"); err == nil {
 		t.Fatal("expected unknown intent error")
@@ -122,10 +125,10 @@ func TestFormatPriceRange(t *testing.T) {
 
 func TestValidateSearchRequest(t *testing.T) {
 	if err := validateSearchRequest(ListingsSearchRequest{}); err == nil {
-		t.Fatal("expected intent error")
+		t.Fatal("expected location error")
 	}
-	if err := validateSearchRequest(ListingsSearchRequest{City: "Seattle", State: "WA"}); err == nil {
-		t.Fatal("expected intent error")
+	if err := validateSearchRequest(ListingsSearchRequest{City: "Seattle", State: "WA"}); err != nil {
+		t.Fatal(err)
 	}
 	if err := validateSearchRequest(ListingsSearchRequest{Intent: IntentRent, City: "Seattle", State: "WA"}); err != nil {
 		t.Fatal(err)
@@ -138,6 +141,12 @@ func TestValidateSearchRequest(t *testing.T) {
 	}
 	if err := validateSearchRequest(ListingsSearchRequest{Intent: IntentRent, ZipCode: "98101", Radius: 200}); err == nil {
 		t.Fatal("expected radius error")
+	}
+	if err := validateSearchRequest(ListingsSearchRequest{Intent: IntentRent, City: "Seattle", State: "WA", PropertyType: "land"}); err == nil {
+		t.Fatal("expected land rejected on rent")
+	}
+	if err := validateSearchRequest(ListingsSearchRequest{Intent: IntentBuy, City: "Seattle", State: "WA", PropertyType: "land"}); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -258,11 +267,11 @@ func TestSearchListingsHTTP(t *testing.T) {
 	if res.Listings[0].Agent == nil || res.Listings[0].Agent.Phone != "2065550100" {
 		t.Fatalf("agent %#v", res.Listings[0].Agent)
 	}
-	if !strings.Contains(res.Listings[0].ListingURL, "google.com/search") {
-		t.Fatalf("listing_url %q", res.Listings[0].ListingURL)
+	if !strings.Contains(res.Listings[0].SearchURL, "google.com/search") || !strings.Contains(res.Listings[0].SearchURL, "rental") {
+		t.Fatalf("search_url %q", res.Listings[0].SearchURL)
 	}
-	if res.Listings[1].ListingURL != "https://harbor.example.com/listing/456" {
-		t.Fatalf("office website url %q", res.Listings[1].ListingURL)
+	if res.Listings[1].Office == nil || res.Listings[1].Office.Website != "https://harbor.example.com/listing/456" {
+		t.Fatalf("office website %#v", res.Listings[1].Office)
 	}
 	if res.Listings[1].Bedrooms != 0 {
 		t.Fatalf("studio bedrooms=%v", res.Listings[1].Bedrooms)
@@ -301,6 +310,38 @@ func TestSearchListingsNeighborhoodHTTP(t *testing.T) {
 	// Radius search may return nearby zips; client filter keeps neighborhood zips when multi.
 	if res.Count < 1 {
 		t.Fatalf("%+v", res)
+	}
+}
+
+func TestSearchListingsDefaultsToRentalPath(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/listings/rental/long-term" {
+			t.Fatalf("empty intent must hit for-rent catalog, got %s", r.URL.Path)
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			{
+				"id": "r1", "formattedAddress": "1 Pine, Seattle, WA 98101",
+				"city": "Seattle", "state": "WA", "price": 2000,
+				"mlsName": "NWMLS", "mlsNumber": "123",
+				"listingAgent": map[string]any{"name": "Pat", "phone": "2065550199", "email": "pat@ex.com"},
+			},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	c := &Client{APIKey: "k", BaseURL: srv.URL, HTTPClient: srv.Client()}
+	res, err := c.SearchListings(t.Context(), ListingsSearchRequest{City: "Seattle", State: "WA"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Intent != IntentRent || res.Listings[0].Intent != IntentRent {
+		t.Fatalf("%+v", res)
+	}
+	if res.Listings[0].MLSName != "NWMLS" || res.Listings[0].MLSNumber != "123" {
+		t.Fatalf("mls %+v", res.Listings[0])
+	}
+	if res.Listings[0].Agent == nil || res.Listings[0].Agent.Email != "pat@ex.com" {
+		t.Fatalf("agent %+v", res.Listings[0].Agent)
 	}
 }
 
@@ -395,8 +436,8 @@ func TestSearchSaleListingsHTTP(t *testing.T) {
 	if !strings.Contains(res.Note, "offers") {
 		t.Fatalf("note %q", res.Note)
 	}
-	if !strings.Contains(res.Listings[0].ListingURL, "for+sale") && !strings.Contains(res.Listings[0].ListingURL, "for sale") {
-		t.Fatalf("listing_url %q", res.Listings[0].ListingURL)
+	if !strings.Contains(res.Listings[0].SearchURL, "for+sale") && !strings.Contains(res.Listings[0].SearchURL, "for sale") {
+		t.Fatalf("search_url %q", res.Listings[0].SearchURL)
 	}
 }
 
@@ -424,8 +465,8 @@ func TestGetListingSaleHTTP(t *testing.T) {
 	if listing.Intent != IntentBuy || listing.Price != 610000 {
 		t.Fatalf("%+v", listing)
 	}
-	if !strings.Contains(listing.ListingURL, "for+sale") && !strings.Contains(listing.ListingURL, "for sale") {
-		t.Fatalf("listing_url %q", listing.ListingURL)
+	if !strings.Contains(listing.SearchURL, "for+sale") && !strings.Contains(listing.SearchURL, "for sale") {
+		t.Fatalf("search_url %q", listing.SearchURL)
 	}
 }
 
@@ -433,9 +474,6 @@ func TestGetListingRequiresID(t *testing.T) {
 	c := &Client{APIKey: "k"}
 	if _, err := c.GetListing(t.Context(), "  ", IntentRent); err == nil {
 		t.Fatal("expected error")
-	}
-	if _, err := c.GetListing(t.Context(), "abc", ""); err == nil {
-		t.Fatal("expected intent error")
 	}
 }
 
@@ -596,14 +634,5 @@ func TestGoogleListingSearchURL(t *testing.T) {
 	buy := googleListingSearchURL("902 N 86th St, Seattle, WA 98103", IntentBuy)
 	if !strings.Contains(buy, "for+sale") && !strings.Contains(buy, "for sale") {
 		t.Fatalf("buy url %q", buy)
-	}
-	if got := listingHandoffURL(Listing{FormattedAddress: "9 Elm St, Denver, CO 80202"}); !strings.Contains(got, "google.com/search") {
-		t.Fatalf("%q", got)
-	}
-	if got := listingHandoffURL(Listing{
-		FormattedAddress: "1 Main",
-		Office:           &ListingContact{Website: "https://broker.example/listing/1"},
-	}); got != "https://broker.example/listing/1" {
-		t.Fatalf("prefer office website: %q", got)
 	}
 }

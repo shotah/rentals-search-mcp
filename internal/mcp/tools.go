@@ -13,7 +13,7 @@ import (
 )
 
 type listingsSearchInput struct {
-	Intent        string  `json:"intent" jsonschema:"REQUIRED. rent or buy. If the human has not said which, ASK before searching — do not guess. rent = long-term lease; buy = purchase / for-sale."`
+	Intent        string  `json:"intent,omitempty" jsonschema:"Defaults to rent (long-term FOR-RENT catalog /listings/rental/long-term). Pass buy only for homes for sale (/listings/sale). Do not guess buy."`
 	City          string  `json:"city,omitempty" jsonschema:"City name (case-sensitive upstream; e.g. Seattle)"`
 	State         string  `json:"state,omitempty" jsonschema:"2-letter state (e.g. WA)"`
 	ZipCode       string  `json:"zip_code,omitempty" jsonschema:"5-digit US zip code"`
@@ -32,9 +32,9 @@ type listingsSearchInput struct {
 	DaysOld       string  `json:"days_old,omitempty" jsonschema:"Max listing age in days (RentCast daysOld); e.g. 7 or *:7"`
 	DaysOldMax    int     `json:"days_old_max,omitempty" jsonschema:"Max days on market (shorthand for days_old)"`
 	NewThisWeek   bool    `json:"new_this_week,omitempty" jsonschema:"Only listings ≤7 days old (sets days_old_max=7)"`
-	PetsWanted    bool    `json:"pets_wanted,omitempty" jsonschema:"Soft preference only — RentCast cannot filter pets; verify on listing_url"`
-	ParkingWanted bool    `json:"parking_wanted,omitempty" jsonschema:"Soft preference only — RentCast cannot filter parking; verify on listing_url"`
-	LaundryWanted bool    `json:"laundry_wanted,omitempty" jsonschema:"Soft preference only — RentCast cannot filter laundry; verify on listing_url"`
+	PetsWanted    bool    `json:"pets_wanted,omitempty" jsonschema:"Soft preference only — RentCast cannot filter pets; verify with agent/office"`
+	ParkingWanted bool    `json:"parking_wanted,omitempty" jsonschema:"Soft preference only — RentCast cannot filter parking; verify with agent/office"`
+	LaundryWanted bool    `json:"laundry_wanted,omitempty" jsonschema:"Soft preference only — RentCast cannot filter laundry; verify with agent/office"`
 	Status        string  `json:"status,omitempty" jsonschema:"Active (default) or Inactive"`
 	Limit         int     `json:"limit,omitempty" jsonschema:"Page size (default 10, max 50)"`
 	Offset        int     `json:"offset,omitempty" jsonschema:"Pagination offset"`
@@ -50,7 +50,7 @@ type areasResolveInput struct {
 
 type listingsGetInput struct {
 	ListingID    string `json:"listing_id" jsonschema:"RentCast listing id from listings_search"`
-	Intent       string `json:"intent" jsonschema:"REQUIRED. rent or buy — same intent used in listings_search. Sale and rental ids are different catalogs. Ask the human if unclear; do not guess."`
+	Intent       string `json:"intent,omitempty" jsonschema:"Defaults to rent (same for-rent catalog as listings_search). Pass buy only if the id came from a buy search. Sale and rental ids are different catalogs."`
 	ConfirmSpend bool   `json:"confirm_spend,omitempty" jsonschema:"Required after the soft cap (usage.confirm_required). Re-call with confirm_spend=true to spend 1 remaining request. Cannot bypass the hard cap of 50."`
 }
 
@@ -69,7 +69,7 @@ type marketsGetInput struct {
 }
 
 type linkFormatInput struct {
-	Intent        string `json:"intent" jsonschema:"REQUIRED. rent or buy. Ask the human if they want to rent or purchase — do not guess."`
+	Intent        string `json:"intent,omitempty" jsonschema:"Defaults to rent (Zillow for_rent). Pass buy only for for_sale."`
 	City          string `json:"city,omitempty" jsonschema:"City name"`
 	State         string `json:"state,omitempty" jsonschema:"2-letter state"`
 	ZipCode       string `json:"zip_code,omitempty" jsonschema:"Zip code"`
@@ -226,7 +226,7 @@ func (s *Server) linkFormat(_ context.Context, _ *sdkmcp.CallToolRequest, in lin
 		u += "&pets=true"
 	}
 	_ = in.PropertyType
-	note := "Fallback public search URL only. Prefer listings_search when API quota allows."
+	note := "Fallback public search URL only (not a RentCast listing). Defaults to for_rent. Prefer listings_search when API quota allows."
 	if in.PetsWanted || in.ParkingWanted || in.LaundryWanted {
 		note += " Amenity URL hints are best-effort; confirm on the site. RentCast cannot filter pets/parking/laundry."
 	}
